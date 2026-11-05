@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { currentUser } from "@/lib/access";
 import { visibleApps } from "@/lib/apps";
 import { listApps } from "@/lib/db";
@@ -15,7 +16,14 @@ async function Portal() {
         <p className="text-lg opacity-70">
           {user.name} ({user.level} access)
         </p>
-        <SignOutButton />
+        <span className="flex items-center gap-4">
+          {user.level === "admin" && (
+            <Link href="/manage" className="underline">
+              Manage apps
+            </Link>
+          )}
+          <SignOutButton />
+        </span>
       </header>
       {apps.length === 0 && (
         <p className="py-16 text-center text-lg opacity-70">No apps have been added for your account yet.</p>

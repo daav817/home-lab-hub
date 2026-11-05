@@ -1,0 +1,22 @@
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/access";
+import { createApp } from "../actions";
+import { AppForm } from "../app-form";
+
+async function NewApp() {
+  const user = await currentUser();
+  if (user.level !== "admin") redirect("/");
+  return <AppForm action={createApp} />;
+}
+
+export default function NewAppPage() {
+  return (
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-8">
+      <h1 className="text-3xl font-semibold">Add app</h1>
+      <Suspense fallback={<p className="opacity-70">Loading…</p>}>
+        <NewApp />
+      </Suspense>
+    </main>
+  );
+}

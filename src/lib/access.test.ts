@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessLevel } from "./access";
+import { accessLevel, assertAdmin } from "./access";
 
 describe("accessLevel", () => {
   it("gives the highest level a person qualifies for", () => {
@@ -14,5 +14,15 @@ describe("accessLevel", () => {
   it("gives no access without a hub group", () => {
     expect(accessLevel([])).toBe("none");
     expect(accessLevel(["some-other-group"])).toBe("none");
+  });
+});
+
+describe("assertAdmin", () => {
+  it("allows admins", () => {
+    expect(() => assertAdmin("admin")).not.toThrow();
+  });
+
+  it.each(["family", "limited", "none"] as const)("rejects %s", (level) => {
+    expect(() => assertAdmin(level)).toThrow("Admin access required");
   });
 });
