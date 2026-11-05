@@ -7,6 +7,8 @@ export const authOptions: NextAuthOptions = {
       clientId: "home-lab-hub",
       clientSecret: process.env.AUTHENTIK_CLIENT_SECRET ?? "",
       issuer: process.env.AUTHENTIK_ISSUER,
+      // The issuer ends in a slash, and the provider's default adds another.
+      wellKnown: `${process.env.AUTHENTIK_ISSUER}.well-known/openid-configuration`,
     }),
   ],
   pages: { signIn: "/sign-in" },
