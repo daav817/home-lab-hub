@@ -1,0 +1,97 @@
+name: Build and Deploy home-lab-hub
+
+# Every push to main runs CI, builds the image, scans it, uploads it to GHCR with
+# a version tag and pins that tag in k8s/kustomization.yaml. Argo CD (app
+# "home-lab-hub") sees the pinned tag and rolls it out to the home lab.
+
+"on":
+  push:
+    branches: [main]
+    # Notes-only changes don't build or roll out a new version.
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: build-and-push
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-and-push:
+    needs: ci
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Version tag
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "TAG=${VERSION}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: home-lab-hub:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.TAG }}
+
+      - name: Scan image for known vulnerabilities (Trivy)
+        run: |
+          docker save home-lab-hub:scan -o image.tar
+          docker run --rm -v "$PWD/image.tar:/image.tar:ro" aquasec/trivy:0.76.1 \
+            image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+
+      - name: Build and push to GHCR
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/daav817/home-lab-hub:latest
+            ghcr.io/daav817/home-lab-hub:${{ steps.version.outputs.TAG }}
+          cache-from: type=gha
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.TAG }}
+
+      - name: Pin new image tag in k8s manifests
+        run: |
+          sed -i "s/newTag: .*/newTag: \"${{ steps.version.outputs.TAG }}\"/" k8s/kustomization.yaml
+
+      - name: Commit and push manifest update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: deploy home-lab-hub ${{ steps.version.outputs.TAG }} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -1,0 +1,22 @@
+# LAN address only. Do not add a Cloudflare tunnel route for hub.energiapower.llc
+# until Authentik protects the hub (Phase 1).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hub
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: hub.192.168.1.243.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hub
+                port:
+                  name: http

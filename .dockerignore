@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.next
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+docker-compose.yml
+k8s
+platform
+.github
+*.md
+.DS_Store
+coverage
+.vscode
+image.tar
