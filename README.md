@@ -35,9 +35,13 @@ Run these once, in order, from this folder.
 
 4. Back up the sealing key somewhere outside the cluster. Without it, sealed
    secrets can't be decrypted after a cluster rebuild. Treat the file like a password,
-   and keep it out of git:
+   and keep it out of git. Run in PowerShell, then check that it lists at least one key:
 
-       kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealing-key -o yaml > sealed-secrets-key.yaml
+       kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml | Out-File -Encoding ascii sealed-secrets-key.yaml
+       Select-String "name: sealed-secrets-key" sealed-secrets-key.yaml
+
+   The controller creates a new key every 30 days, so repeat this backup after adding
+   new sealed secrets.
 
 5. Install the free [Renovate GitHub App](https://github.com/apps/renovate) on this repo.
 
