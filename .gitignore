@@ -41,4 +41,4 @@ yarn-error.log*
 next-env.d.ts
 
 # sealed secrets backup key, keep out of git
-sealed-secrets-key*.yaml
+sealed-secrets-key*
