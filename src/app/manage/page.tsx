@@ -14,12 +14,12 @@ async function Manage() {
 
   return (
     <>
-      <ul className="flex flex-col divide-y divide-current/20">
+      <ul className="panel flex flex-col divide-y divide-foreground/10 px-5">
         {apps.map((app) => (
           <li key={app.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span>
               <span className="font-medium">{app.name}</span>
-              <span className="block text-sm opacity-70">
+              <span className="text-muted block text-sm">
                 {app.category} · {app.audience}
                 {app.hidden && " · hidden"}
               </span>
@@ -38,10 +38,10 @@ async function Manage() {
           </li>
         ))}
       </ul>
-      <section className="flex flex-col gap-2">
+      <section className="panel flex flex-col gap-2 p-5">
         <h2 className="text-xl font-medium">Recent changes</h2>
-        {audit.length === 0 && <p className="opacity-70">No changes yet.</p>}
-        <ul className="text-sm opacity-70">
+        {audit.length === 0 && <p className="text-muted">No changes yet.</p>}
+        <ul className="text-muted text-sm">
           {audit.map((entry) => (
             <li key={entry.id}>
               {entry.at.toLocaleString("en-US")} · {entry.actor} · {entry.action} · {entry.target}
@@ -55,9 +55,9 @@ async function Manage() {
 
 export default function ManagePage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold">Manage apps</h1>
+        <h1 className="brand-text text-3xl font-bold">Manage apps</h1>
         <span className="flex gap-4">
           <Link href="/" className="underline">
             Back to hub
@@ -67,7 +67,7 @@ export default function ManagePage() {
           </Link>
         </span>
       </header>
-      <Suspense fallback={<p className="opacity-70">Loading…</p>}>
+      <Suspense fallback={<p className="text-muted">Loading…</p>}>
         <Manage />
       </Suspense>
     </main>

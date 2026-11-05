@@ -14,7 +14,7 @@ export function SignInError() {
   if (!error) return null;
 
   return (
-    <p role="alert" className="max-w-md rounded-lg border border-rose-500 px-4 py-3 text-rose-500">
+    <p role="alert" className="max-w-md rounded-lg border border-(--down) px-4 py-3 text-(--down)">
       {messages[error] ?? "Sign-in failed. Try again."}
     </p>
   );

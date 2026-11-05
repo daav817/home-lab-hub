@@ -1,26 +1,200 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3f5fb;
+  --foreground: #10162b;
+  --muted: #4c5573;
+  --panel: rgb(255 255 255 / 0.72);
+  --panel-border: rgb(16 22 43 / 0.12);
+  --glow-strength: 0.16;
+  --cyan: #0891b2;
+  --violet: #7c3aed;
+  --magenta: #c026d3;
+  --lime: #4d7c0f;
+  --amber: #b45309;
+  --up: #15803d;
+  --down: #be123c;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #060914;
+    --foreground: #eef1fb;
+    --muted: #a3acc9;
+    --panel: rgb(20 27 52 / 0.62);
+    --panel-border: rgb(255 255 255 / 0.12);
+    --glow-strength: 0.38;
+    --cyan: #22d3ee;
+    --violet: #a78bfa;
+    --magenta: #e879f9;
+    --lime: #a3e635;
+    --amber: #fbbf24;
+    --up: #4ade80;
+    --down: #fb7185;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+}
+
+/* Slow colored light behind every page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(40% 40% at 20% 25%, rgb(34 211 238 / var(--glow-strength)), transparent 70%),
+    radial-gradient(38% 38% at 80% 20%, rgb(167 139 250 / var(--glow-strength)), transparent 70%),
+    radial-gradient(42% 42% at 70% 80%, rgb(232 121 249 / var(--glow-strength)), transparent 70%),
+    radial-gradient(30% 30% at 25% 80%, rgb(163 230 53 / calc(var(--glow-strength) * 0.5)), transparent 70%);
+  animation: drift 32s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  to {
+    transform: translate3d(4%, -3%, 0) rotate(6deg) scale(1.08);
+  }
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .status-up {
+    animation: none;
+  }
+
+  .tile {
+    transition: none;
+  }
+}
+
+.brand-text {
+  width: fit-content;
+  background: linear-gradient(95deg, var(--cyan), var(--violet) 50%, var(--magenta));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.tile {
+  --accent: var(--cyan);
+  position: relative;
+  display: flex;
+  gap: 0.875rem;
+  height: 100%;
+  padding: 1rem;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 34px -12px var(--accent);
+}
+
+.monogram {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 9999px;
+  background: var(--muted);
+}
+
+.status-up {
+  background: var(--up);
+  animation: pulse-ring 2.6s ease-in-out infinite;
+}
+
+.status-down {
+  background: var(--down);
+}
+
+.btn-primary {
+  border-radius: 0.75rem;
+  background: linear-gradient(95deg, #0891b2, #7c3aed 55%, #c026d3);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.12);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+}
+
+.btn-quiet {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  padding: 0.5rem 0.875rem;
+}
+
+.btn-quiet:hover {
+  border-color: var(--cyan);
+}
+
+.field {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  padding: 0.5rem 0.75rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(6 9 20 / 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }

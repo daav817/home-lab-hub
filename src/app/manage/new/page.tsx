@@ -12,9 +12,9 @@ async function NewApp() {
 
 export default function NewAppPage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-8">
-      <h1 className="text-3xl font-semibold">Add app</h1>
-      <Suspense fallback={<p className="opacity-70">Loading…</p>}>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8">
+      <h1 className="brand-text text-3xl font-bold">Add app</h1>
+      <Suspense fallback={<p className="text-muted">Loading…</p>}>
         <NewApp />
       </Suspense>
     </main>

@@ -9,15 +9,15 @@ type Props = {
   app?: ManagedApp;
 };
 
-const input = "rounded-lg border border-current/30 bg-transparent px-3 py-2";
+const input = "field";
 
 export function AppForm({ action, app }: Props) {
   const [state, formAction, pending] = useActionState(action, {});
 
   return (
-    <form action={formAction} className="flex max-w-xl flex-col gap-4">
+    <form action={formAction} className="panel flex max-w-xl flex-col gap-4 p-6">
       {state.error && (
-        <p role="alert" className="rounded-lg border border-rose-500 px-4 py-3 text-rose-500">
+        <p role="alert" className="rounded-lg border border-(--down) px-4 py-3 text-(--down)">
           {state.error}
         </p>
       )}
@@ -60,7 +60,7 @@ export function AppForm({ action, app }: Props) {
       <button
         type="submit"
         disabled={pending}
-        className="self-start rounded-lg bg-gradient-to-r from-cyan-500 via-violet-500 to-fuchsia-500 px-6 py-2 font-medium text-white disabled:opacity-50"
+        className="btn-primary self-start"
       >
         {pending ? "Saving…" : "Save"}
       </button>

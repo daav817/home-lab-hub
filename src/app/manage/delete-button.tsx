@@ -8,7 +8,7 @@ export function DeleteButton({ name, action }: { name: string; action: () => Pro
         if (!window.confirm(`Remove ${name} from the hub?`)) event.preventDefault();
       }}
     >
-      <button type="submit" className="text-rose-500 underline">
+      <button type="submit" className="text-(--down) underline">
         Remove
       </button>
     </form>
