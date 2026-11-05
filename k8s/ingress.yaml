@@ -1,5 +1,5 @@
-# LAN address only. Do not add a Cloudflare tunnel route for hub.energiapower.llc
-# until Authentik protects the hub (Phase 1).
+# LAN address. From outside, hub.energiapower.llc reaches the service through the
+# Cloudflare tunnel (route set in the Cloudflare dashboard).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

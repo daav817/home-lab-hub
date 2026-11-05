@@ -25,6 +25,14 @@ spec:
       containers:
         - name: web
           image: ghcr.io/daav817/home-lab-hub:latest
+          env:
+            - name: NEXTAUTH_URL
+              value: https://hub.energiapower.llc
+            - name: AUTHENTIK_ISSUER
+              value: https://auth.energiapower.llc/application/o/home-lab-hub/
+          envFrom:
+            - secretRef:
+                name: hub-auth
           ports:
             - name: http
               containerPort: 3000
