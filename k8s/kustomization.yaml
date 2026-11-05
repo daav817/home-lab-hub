@@ -10,4 +10,4 @@ resources:
   - hub-auth.sealedsecret.yaml
 images:
   - name: ghcr.io/daav817/home-lab-hub
-    newTag: "0.1.0.4"
+    newTag: "0.1.0.5"
