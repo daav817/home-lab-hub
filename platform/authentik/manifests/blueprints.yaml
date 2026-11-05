@@ -1,0 +1,385 @@
+# Authentik setup as code. Authentik reads this through blueprints.configMaps in
+# ../argocd-application.yaml and re-applies it, so change it here, not in its UI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: authentik
+data:
+  hub-identity.yaml: |
+    version: 1
+    metadata:
+      name: Hub - identity
+    entries:
+      # Password rules and required 2FA.
+      - id: password-policy
+        model: authentik_policies_password.passwordpolicy
+        identifiers:
+          name: hub-password-policy
+        attrs:
+          password_field: password
+          length_min: 12
+          check_static_rules: true
+          check_have_i_been_pwned: true
+          hibp_allowed_count: 0
+          check_zxcvbn: false
+          error_message: Use at least 12 characters, and a password that has not been in a known breach.
+
+      # Accounts with no 2FA device must set one up at their next login.
+      - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+        identifiers:
+          name: default-authentication-mfa-validation
+        attrs:
+          not_configured_action: configure
+          configuration_stages:
+            - !Find [authentik_stages_authenticator_totp.authenticatortotpstage, [name, default-authenticator-totp-setup]]
+
+      # Password reset needs the emailed link and a 2FA code. Authentik's example
+      # flows-recovery-email-mfa-verification.yaml, plus the password policy.
+      - identifiers:
+          slug: default-recovery-flow
+        id: flow
+        model: authentik_flows.flow
+        attrs:
+          name: Default recovery flow
+          title: Reset your password
+          designation: recovery
+          authentication: require_unauthenticated
+      - identifiers:
+          name: default-recovery-field-password
+        id: prompt-field-password
+        model: authentik_stages_prompt.prompt
+        attrs:
+          field_key: password
+          label: Password
+          type: password
+          required: true
+          placeholder: Password
+          order: 0
+          placeholder_expression: false
+      - identifiers:
+          name: default-recovery-field-password-repeat
+        id: prompt-field-password-repeat
+        model: authentik_stages_prompt.prompt
+        attrs:
+          field_key: password_repeat
+          label: Password (repeat)
+          type: password
+          required: true
+          placeholder: Password (repeat)
+          order: 1
+          placeholder_expression: false
+      - identifiers:
+          name: default-recovery-skip-if-restored
+        id: default-recovery-skip-if-restored
+        model: authentik_policies_expression.expressionpolicy
+        attrs:
+          expression: |
+            return bool(request.context.get('is_restored', True))
+      - identifiers:
+          name: default-recovery-email
+        id: default-recovery-email
+        model: authentik_stages_email.emailstage
+        attrs:
+          use_global_settings: true
+          host: localhost
+          port: 25
+          username: ""
+          use_tls: false
+          use_ssl: false
+          timeout: 10
+          from_address: system@authentik.local
+          token_expiry: minutes=30
+          subject: authentik
+          template: email/password_reset.html
+          activate_user_on_success: true
+          recovery_max_attempts: 5
+          recovery_cache_timeout: minutes=5
+      - identifiers:
+          name: default-recovery-mfa
+        id: default-recovery-mfa
+        model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+      - identifiers:
+          name: default-recovery-user-write
+        id: default-recovery-user-write
+        model: authentik_stages_user_write.userwritestage
+        attrs:
+          user_creation_mode: never_create
+      - identifiers:
+          name: default-recovery-identification
+        id: default-recovery-identification
+        model: authentik_stages_identification.identificationstage
+        attrs:
+          user_fields:
+            - email
+            - username
+      - identifiers:
+          name: default-recovery-user-login
+        id: default-recovery-user-login
+        model: authentik_stages_user_login.userloginstage
+      - identifiers:
+          name: Change your password
+        id: stages-prompt-password
+        model: authentik_stages_prompt.promptstage
+        attrs:
+          fields:
+            - !KeyOf prompt-field-password
+            - !KeyOf prompt-field-password-repeat
+          validation_policies:
+            - !KeyOf password-policy
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf default-recovery-identification
+          order: 10
+        model: authentik_flows.flowstagebinding
+        id: flow-binding-identification
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: true
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf default-recovery-email
+          order: 20
+        model: authentik_flows.flowstagebinding
+        id: flow-binding-email
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: true
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf default-recovery-mfa
+          order: 21
+        model: authentik_flows.flowstagebinding
+        id: flow-binding-mfa
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: true
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf stages-prompt-password
+          order: 30
+        model: authentik_flows.flowstagebinding
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: false
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf default-recovery-user-write
+          order: 40
+        model: authentik_flows.flowstagebinding
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: false
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          target: !KeyOf flow
+          stage: !KeyOf default-recovery-user-login
+          order: 100
+        model: authentik_flows.flowstagebinding
+        attrs:
+          evaluate_on_plan: true
+          re_evaluate_policies: false
+          policy_engine_mode: any
+          invalid_response_action: retry
+      - identifiers:
+          policy: !KeyOf default-recovery-skip-if-restored
+          target: !KeyOf flow-binding-identification
+          order: 0
+        model: authentik_policies.policybinding
+        attrs:
+          negate: false
+          enabled: true
+          timeout: 30
+      - identifiers:
+          policy: !KeyOf default-recovery-skip-if-restored
+          target: !KeyOf flow-binding-email
+          order: 0
+        state: absent
+        model: authentik_policies.policybinding
+        attrs:
+          negate: false
+          enabled: true
+          timeout: 30
+
+      # Shows the "Forgot password" link on the login page.
+      - model: authentik_stages_identification.identificationstage
+        identifiers:
+          name: default-authentication-identification
+        attrs:
+          user_fields:
+            - email
+            - username
+          recovery_flow: !KeyOf flow
+
+      - model: authentik_brands.brand
+        identifiers:
+          domain: authentik-default
+        attrs:
+          flow_recovery: !KeyOf flow
+
+      # Invite-only accounts. Each flow puts the new person in one access group.
+      # Neither logs them in at the end, so required 2FA catches their first login.
+      - id: group-family
+        model: authentik_core.group
+        identifiers:
+          name: hub-family
+      - id: group-limited
+        model: authentik_core.group
+        identifiers:
+          name: hub-limited
+
+      - id: invitation-stage
+        model: authentik_stages_invitation.invitationstage
+        identifiers:
+          name: hub-invitation
+        attrs:
+          continue_flow_without_invitation: false
+
+      - id: field-username
+        model: authentik_stages_prompt.prompt
+        identifiers:
+          name: hub-invite-field-username
+        attrs:
+          field_key: username
+          label: Username
+          type: username
+          required: true
+          placeholder: Username
+          order: 0
+      - id: field-name
+        model: authentik_stages_prompt.prompt
+        identifiers:
+          name: hub-invite-field-name
+        attrs:
+          field_key: name
+          label: Name
+          type: text
+          required: true
+          placeholder: Name
+          order: 1
+      - id: field-email
+        model: authentik_stages_prompt.prompt
+        identifiers:
+          name: hub-invite-field-email
+        attrs:
+          field_key: email
+          label: Email
+          type: email
+          required: true
+          placeholder: Email
+          order: 2
+      - id: field-password
+        model: authentik_stages_prompt.prompt
+        identifiers:
+          name: hub-invite-field-password
+        attrs:
+          field_key: password
+          label: Password
+          type: password
+          required: true
+          placeholder: Password
+          order: 3
+      - id: field-password-repeat
+        model: authentik_stages_prompt.prompt
+        identifiers:
+          name: hub-invite-field-password-repeat
+        attrs:
+          field_key: password_repeat
+          label: Password (repeat)
+          type: password
+          required: true
+          placeholder: Password (repeat)
+          order: 4
+
+      - id: prompt-stage
+        model: authentik_stages_prompt.promptstage
+        identifiers:
+          name: hub-invite-details
+        attrs:
+          fields:
+            - !KeyOf field-username
+            - !KeyOf field-name
+            - !KeyOf field-email
+            - !KeyOf field-password
+            - !KeyOf field-password-repeat
+          validation_policies:
+            - !KeyOf password-policy
+
+      - id: write-family
+        model: authentik_stages_user_write.userwritestage
+        identifiers:
+          name: hub-invite-write-family
+        attrs:
+          user_creation_mode: always_create
+          user_type: internal
+          user_path_template: users/hub
+          create_users_group: !KeyOf group-family
+      - id: write-limited
+        model: authentik_stages_user_write.userwritestage
+        identifiers:
+          name: hub-invite-write-limited
+        attrs:
+          user_creation_mode: always_create
+          user_type: internal
+          user_path_template: users/hub
+          create_users_group: !KeyOf group-limited
+
+      - id: flow-family
+        model: authentik_flows.flow
+        identifiers:
+          slug: hub-invite-family
+        attrs:
+          name: Hub invitation - family
+          title: Create your Home Lab Hub account
+          designation: enrollment
+          authentication: require_unauthenticated
+      - id: flow-limited
+        model: authentik_flows.flow
+        identifiers:
+          slug: hub-invite-limited
+        attrs:
+          name: Hub invitation - limited
+          title: Create your Home Lab Hub account
+          designation: enrollment
+          authentication: require_unauthenticated
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-family
+          stage: !KeyOf invitation-stage
+          order: 5
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-family
+          stage: !KeyOf prompt-stage
+          order: 10
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-family
+          stage: !KeyOf write-family
+          order: 20
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-limited
+          stage: !KeyOf invitation-stage
+          order: 5
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-limited
+          stage: !KeyOf prompt-stage
+          order: 10
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf flow-limited
+          stage: !KeyOf write-limited
+          order: 20

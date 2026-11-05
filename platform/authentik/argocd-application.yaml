@@ -21,6 +21,9 @@ spec:
             # non-secret settings live in global.env below.
             existingSecret:
               secretName: authentik-secrets
+          blueprints:
+            configMaps:
+              - authentik-blueprints
           global:
             env:
               - name: AUTHENTIK_POSTGRESQL__HOST
