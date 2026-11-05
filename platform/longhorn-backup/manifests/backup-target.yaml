@@ -6,7 +6,6 @@ metadata:
   name: default
   namespace: longhorn-system
 spec:
-  # Paused while the router login is fixed. Restore: cifs://192.168.1.1/k8s-storage-folder?cifsOptions=vers=2.0,soft
-  backupTargetURL: ""
+  backupTargetURL: cifs://192.168.1.1/k8s-storage-folder?cifsOptions=vers=2.0,soft
   credentialSecret: cifs-secret
   pollInterval: 300s
