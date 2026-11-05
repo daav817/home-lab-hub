@@ -1,0 +1,14 @@
+# Runs after the 2:00 snapshots. Only volumes labeled by
+# scripts/label-backup-volumes.ps1 are included. Metrics and logs are left out.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: nightly-backup
+  namespace: longhorn-system
+spec:
+  cron: "30 3 * * *"
+  task: backup
+  groups:
+    - critical-data
+  retain: 14
+  concurrency: 1
