@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+# Sealed secrets are encrypted for the cluster, so their long values are safe to commit.
+[allowlist]
+paths = ['''\.sealedsecret\.yaml$''']

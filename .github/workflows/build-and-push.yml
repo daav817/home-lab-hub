@@ -10,6 +10,8 @@ name: Build and Deploy home-lab-hub
     # Notes-only changes don't build or roll out a new version.
     paths-ignore:
       - "**.md"
+      - "platform/**"
+      - "scripts/**"
   workflow_dispatch:
 
 permissions:

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # sealed secrets backup key, keep out of git
 sealed-secrets-key*
+
+# local tools
+/.tools/

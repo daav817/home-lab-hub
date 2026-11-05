@@ -1,0 +1,100 @@
+# Applied once by hand: kubectl apply -f platform/authentik/argocd-application.yaml
+# The chart comes from Authentik. Sealed secrets come from platform/authentik/manifests.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.goauthentik.io
+      chart: authentik
+      targetRevision: 2026.8.5
+      helm:
+        releaseName: authentik
+        valuesObject:
+          authentik:
+            # With this set the chart ignores every other authentik.* value, so the
+            # non-secret settings live in global.env below.
+            existingSecret:
+              secretName: authentik-secrets
+          global:
+            env:
+              - name: AUTHENTIK_POSTGRESQL__HOST
+                value: authentik-postgresql
+              - name: AUTHENTIK_POSTGRESQL__NAME
+                value: authentik
+              - name: AUTHENTIK_POSTGRESQL__USER
+                value: authentik
+              - name: AUTHENTIK_POSTGRESQL__PORT
+                value: "5432"
+              - name: AUTHENTIK_ERROR_REPORTING__ENABLED
+                value: "false"
+              - name: AUTHENTIK_EMAIL__HOST
+                value: smtp.resend.com
+              - name: AUTHENTIK_EMAIL__PORT
+                value: "587"
+              - name: AUTHENTIK_EMAIL__USERNAME
+                value: resend
+              - name: AUTHENTIK_EMAIL__USE_TLS
+                value: "true"
+              - name: AUTHENTIK_EMAIL__FROM
+                value: Home Lab Hub <no-reply@energiapower.llc>
+            envFrom:
+              # Optional so Authentik can start before the Resend key is sealed.
+              - secretRef:
+                  name: authentik-email
+                  optional: true
+          server:
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 1Gi
+            ingress:
+              enabled: true
+              ingressClassName: traefik
+              annotations:
+                traefik.ingress.kubernetes.io/router.entrypoints: websecure
+                traefik.ingress.kubernetes.io/router.tls: "true"
+              # LAN address for first-time setup. The public tunnel route to
+              # auth.energiapower.llc is added after the admin account has 2FA.
+              hosts:
+                - auth.192.168.1.243.nip.io
+          worker:
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 1Gi
+          postgresql:
+            enabled: true
+            auth:
+              existingSecret: authentik-secrets
+            primary:
+              persistence:
+                enabled: true
+                storageClass: longhorn
+                size: 8Gi
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+    - repoURL: https://github.com/daav817/home-lab-hub.git
+      targetRevision: main
+      path: platform/authentik/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
