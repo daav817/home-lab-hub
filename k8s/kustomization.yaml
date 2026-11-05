@@ -8,6 +8,8 @@ resources:
   - service.yaml
   - ingress.yaml
   - hub-auth.sealedsecret.yaml
+  - hub-db.sealedsecret.yaml
+  - postgres.yaml
 images:
   - name: ghcr.io/daav817/home-lab-hub
     newTag: "0.1.0.6"

@@ -13,7 +13,8 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  // CSP is added in Phase 2 with per-request nonces. HSTS is left to Cloudflare,
+  // No CSP yet: per-request nonces need every page rendered dynamically, which conflicts
+  // with the prerendered shells used here. HSTS is left to Cloudflare,
   // because the LAN address uses Traefik's default certificate.
   async headers() {
     return [

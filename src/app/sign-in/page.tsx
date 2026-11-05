@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { SignInButton } from "./sign-in-button";
+import { SignInError } from "./sign-in-error";
 
 export default function SignIn() {
   return (
@@ -6,6 +8,9 @@ export default function SignIn() {
       <h1 className="bg-gradient-to-r from-cyan-400 via-violet-500 to-fuchsia-500 bg-clip-text text-5xl font-semibold tracking-tight text-transparent">
         Home Lab Hub
       </h1>
+      <Suspense>
+        <SignInError />
+      </Suspense>
       <SignInButton />
     </main>
   );

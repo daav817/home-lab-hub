@@ -1,0 +1,52 @@
+import { sql } from "./db";
+
+// Applied once each, in order. Add new migrations to the end; never edit an old one.
+const migrations = [
+  `create table apps (
+     id uuid primary key default gen_random_uuid(),
+     name text not null unique,
+     description text not null default '',
+     url text not null,
+     status_url text,
+     category text not null,
+     audience text not null check (audience in ('everyone', 'family', 'admin')),
+     hidden boolean not null default false,
+     sort_order integer not null default 100,
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now()
+   )`,
+  `create table audit_log (
+     id bigint generated always as identity primary key,
+     at timestamptz not null default now(),
+     actor text not null,
+     action text not null,
+     target text not null,
+     detail jsonb
+   )`,
+  `insert into apps (name, description, url, status_url, category, audience, sort_order) values
+     ('CRM', 'Customer records', 'https://crm.energiapower.llc', 'http://energia.default.svc.cluster.local', 'Business', 'family', 10),
+     ('PDF Edit', 'Edit and sign PDFs', 'https://pdf-edit.energiapower.llc', 'http://pdf-edit.pdf-edit.svc.cluster.local/api/health', 'Business', 'family', 20),
+     ('Investco', 'Investment tracking', 'https://investco.energiapower.llc', 'http://investco.investco.svc.cluster.local', 'Business', 'family', 30),
+     ('Godseye', 'Godseye', 'https://godseye.energiapower.llc', 'http://godseye.godseye.svc.cluster.local', 'Business', 'family', 40),
+     ('Petros AI', 'Home network only', 'http://192.168.1.240', 'http://petros-ai-engine.default.svc.cluster.local', 'Business', 'family', 50),
+     ('Energia Website', 'Public business site', 'https://www.energiapower.llc', 'http://energia-website.energia-web.svc.cluster.local', 'Business', 'family', 60),
+     ('ArgoCD', 'Deployments. Home network only', 'https://argocd.192.168.1.243.nip.io', 'http://argocd-server.argocd.svc.cluster.local/healthz', 'Admin', 'admin', 70),
+     ('Grafana', 'Cluster dashboards', 'https://grafana.energiapower.llc', 'http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health', 'Admin', 'admin', 80),
+     ('Authentik', 'Users, invites and login settings', 'https://auth.energiapower.llc', 'http://authentik-server.authentik.svc.cluster.local/-/health/live/', 'Admin', 'admin', 90)`,
+];
+
+export async function migrate() {
+  await sql.begin(async (tx) => {
+    // Stops two pods starting at once from running the same migration.
+    await tx`select pg_advisory_xact_lock(727274)`;
+    await tx`create table if not exists schema_migrations (version integer primary key)`;
+    const [{ version }] = await tx<{ version: number }[]>`
+      select coalesce(max(version), 0) as version from schema_migrations
+    `;
+    for (const [index, statement] of migrations.entries()) {
+      if (index < version) continue;
+      await tx.unsafe(statement);
+      await tx`insert into schema_migrations (version) values (${index + 1})`;
+    }
+  });
+}
