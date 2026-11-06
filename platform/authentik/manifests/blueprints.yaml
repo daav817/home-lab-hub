@@ -493,6 +493,61 @@ data:
           group: !Find [authentik_core.group, [name, authentik Admins]]
           order: 0
 
+      # Same login as Longhorn, for two more tools with no login of their own. Admins only,
+      # with normal single sign-on rather than a 2FA prompt each time. See
+      # platform/monitoring-access/manifests/monitoring-ui.yaml.
+      - id: prometheus-provider
+        model: authentik_providers_proxy.proxyprovider
+        identifiers:
+          name: prometheus
+        attrs:
+          mode: forward_single
+          external_host: https://prometheus.energiapower.llc
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+
+      - id: prometheus-application
+        model: authentik_core.application
+        identifiers:
+          slug: prometheus
+        attrs:
+          name: Prometheus
+          provider: !KeyOf prometheus-provider
+          meta_launch_url: https://prometheus.energiapower.llc
+          policy_engine_mode: any
+
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf prometheus-application
+          group: !Find [authentik_core.group, [name, authentik Admins]]
+          order: 0
+
+      - id: alertmanager-provider
+        model: authentik_providers_proxy.proxyprovider
+        identifiers:
+          name: alertmanager
+        attrs:
+          mode: forward_single
+          external_host: https://alertmanager.energiapower.llc
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+
+      - id: alertmanager-application
+        model: authentik_core.application
+        identifiers:
+          slug: alertmanager
+        attrs:
+          name: Alertmanager
+          provider: !KeyOf alertmanager-provider
+          meta_launch_url: https://alertmanager.energiapower.llc
+          policy_engine_mode: any
+
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf alertmanager-application
+          group: !Find [authentik_core.group, [name, authentik Admins]]
+          order: 0
+
       # Every provider of this kind must be listed here.
       - model: authentik_outposts.outpost
         identifiers:
@@ -505,3 +560,5 @@ data:
             authentik_host: https://auth.energiapower.llc/
           providers:
             - !KeyOf longhorn-provider
+            - !KeyOf prometheus-provider
+            - !KeyOf alertmanager-provider
