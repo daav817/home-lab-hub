@@ -13,8 +13,9 @@ const statusText: Record<AppStatus | "checking", string> = {
 
 function StatusDot({ status }: { status: AppStatus | "checking" }) {
   const tone = status === "up" ? "status-up" : status === "down" ? "status-down" : "";
+  const color = status === "up" ? "text-(--up)" : status === "down" ? "text-(--down)" : "text-muted";
   return (
-    <span className="text-muted flex items-center gap-2 text-xs">
+    <span className={`flex items-center gap-2 text-sm font-medium ${color}`}>
       <span className={`status-dot ${tone}`} aria-hidden="true" />
       {statusText[status]}
     </span>

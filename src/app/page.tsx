@@ -6,6 +6,7 @@ import { backupWarning } from "@/lib/backups";
 import { listManagedApps } from "@/lib/db";
 import { AppSearch } from "./app-search";
 import { AppTile } from "./app-tile";
+import { AutoRefresh } from "./auto-refresh";
 import { SignOutButton } from "./sign-out-button";
 
 async function BackupWarning() {
@@ -25,6 +26,7 @@ async function Portal() {
 
   return (
     <>
+      <AutoRefresh seconds={30} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted">
           {user.name} · {user.level} access

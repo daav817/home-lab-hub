@@ -1,19 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f5fb;
-  --foreground: #10162b;
-  --muted: #4c5573;
-  --panel: rgb(255 255 255 / 0.72);
-  --panel-border: rgb(16 22 43 / 0.12);
-  --glow-strength: 0.16;
-  --cyan: #0891b2;
-  --violet: #7c3aed;
-  --magenta: #c026d3;
-  --lime: #4d7c0f;
-  --amber: #b45309;
-  --up: #15803d;
-  --down: #be123c;
+  color-scheme: dark;
+  --background: #060914;
+  --foreground: #eef1fb;
+  --muted: #a3acc9;
+  --panel: rgb(20 27 52 / 0.62);
+  --panel-border: rgb(255 255 255 / 0.12);
+  --glow-strength: 0.38;
+  --cyan: #22d3ee;
+  --violet: #a78bfa;
+  --magenta: #e879f9;
+  --lime: #a3e635;
+  --amber: #fbbf24;
+  --up: #4ade80;
+  --down: #fb7185;
 }
 
 @theme inline {
@@ -22,24 +23,6 @@
   --color-muted: var(--muted);
   --font-sans: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #060914;
-    --foreground: #eef1fb;
-    --muted: #a3acc9;
-    --panel: rgb(20 27 52 / 0.62);
-    --panel-border: rgb(255 255 255 / 0.12);
-    --glow-strength: 0.38;
-    --cyan: #22d3ee;
-    --violet: #a78bfa;
-    --magenta: #e879f9;
-    --lime: #a3e635;
-    --amber: #fbbf24;
-    --up: #4ade80;
-    --down: #fb7185;
-  }
 }
 
 body {
@@ -71,10 +54,14 @@ body::before {
 @keyframes pulse-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent);
+    box-shadow:
+      0 0 8px var(--up),
+      0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px transparent;
+    box-shadow:
+      0 0 8px var(--up),
+      0 0 0 6px transparent;
   }
 }
 
@@ -139,19 +126,21 @@ body::before {
 
 .status-dot {
   display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.875rem;
+  height: 0.875rem;
   border-radius: 9999px;
   background: var(--muted);
 }
 
 .status-up {
   background: var(--up);
+  box-shadow: 0 0 8px var(--up);
   animation: pulse-ring 2.6s ease-in-out infinite;
 }
 
 .status-down {
   background: var(--down);
+  box-shadow: 0 0 8px var(--down);
 }
 
 .btn-primary {
