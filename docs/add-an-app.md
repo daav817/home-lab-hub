@@ -37,12 +37,13 @@ curl.exe -sk -o NUL -w "%{http_code} %{redirect_url}" -H "Host: NAME.energiapowe
 
 ## 4. Add the public address
 
-Add the route in Cloudflare under Tunnels, Public Hostnames.
+In Cloudflare, go to **Networking**, **Tunnels**, select the tunnel, and open **Routes**.
 
 - App with its own login: point the route at the app's service.
 - App behind Authentik: point the route at Traefik, using
-  `https://traefik.traefik.svc.cluster.local:443` with **No TLS Verify** on. Never point it at the
-  app's service, because that skips the login entirely.
+  `https://traefik.traefik.svc.cluster.local:443`. Under **Additional application settings**, **TLS**,
+  turn on **Disable TLS certificate verification**. Never point it at the app's service, because
+  that skips the login entirely.
 
 ## 5. Check it from outside
 
