@@ -64,4 +64,6 @@ Longhorn backs up six volumes to `k8s-storage-folder` on the router every night 
 - **Restore or delete:** only in Longhorn at <https://longhorn.energiapower.llc>, which is admin-only.
   The hub has no permission to change or delete backups.
 
+To prove a backup still restores, run `scripts/restore-test.ps1`. Last passed 2026-11-06, hub database only.
+
 To add an app, follow [docs/add-an-app.md](docs/add-an-app.md).
