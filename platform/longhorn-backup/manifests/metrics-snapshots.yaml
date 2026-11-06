@@ -1,0 +1,16 @@
+# Metrics and logs rewrite most of their data every few days, so each snapshot keeps a full
+# extra copy. Prometheus held 6 GB of data and 87 GB of snapshots, on all three replicas.
+# Volumes labeled by scripts/label-metrics-volumes.ps1 leave the default snapshot group,
+# and this job clears what they already have. It creates nothing.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: metrics-snapshot-cleanup
+  namespace: longhorn-system
+spec:
+  cron: "0 5 * * *"
+  task: snapshot-delete
+  groups:
+    - metrics
+  retain: 1
+  concurrency: 1
