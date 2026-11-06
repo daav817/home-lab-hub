@@ -62,6 +62,9 @@ export default function ManagePage() {
           <Link href="/" className="underline">
             Back to hub
           </Link>
+          <Link href="/manage/health" className="underline">
+            Health
+          </Link>
           <Link href="/manage/backups" className="underline">
             Backups
           </Link>

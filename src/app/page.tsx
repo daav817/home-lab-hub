@@ -3,6 +3,7 @@ import Link from "next/link";
 import { currentUser } from "@/lib/access";
 import { visibleApps } from "@/lib/apps";
 import { backupWarning } from "@/lib/backups";
+import { healthWarning } from "@/lib/cluster-health";
 import { listManagedApps } from "@/lib/db";
 import { AppSearch } from "./app-search";
 import { AppTile } from "./app-tile";
@@ -14,6 +15,16 @@ async function BackupWarning() {
   if (!warning) return null;
   return (
     <Link href="/manage/backups" role="alert" className="panel px-5 py-3 text-(--down)">
+      {warning}
+    </Link>
+  );
+}
+
+async function HealthWarning() {
+  const warning = await healthWarning();
+  if (!warning) return null;
+  return (
+    <Link href="/manage/health" role="alert" className="panel px-5 py-3 text-(--down)">
       {warning}
     </Link>
   );
@@ -44,6 +55,11 @@ async function Portal() {
       {user.level === "admin" && (
         <Suspense fallback={null}>
           <BackupWarning />
+        </Suspense>
+      )}
+      {user.level === "admin" && (
+        <Suspense fallback={null}>
+          <HealthWarning />
         </Suspense>
       )}
       {apps.length === 0 && (

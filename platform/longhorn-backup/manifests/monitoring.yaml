@@ -38,6 +38,14 @@ spec:
             severity: warning
           annotations:
             summary: Volume {{ $labels.volume }} has had no backup for over 30 hours.
+        # Without this, losing Longhorn's metrics would silence every rule here.
+        - alert: LonghornMetricsMissing
+          expr: absent(longhorn_volume_last_backup_at)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Prometheus has no Longhorn data, so backup and storage alerts can't fire.
         # States: 0 new, 1 pending, 2 in progress, 3 completed, 4 error, 5 unknown.
         - alert: LonghornBackupFailed
           expr: max by (backup, volume) (longhorn_backup_state) == 4
