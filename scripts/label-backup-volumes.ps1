@@ -11,7 +11,8 @@ $wanted = @(
   "authentik/data-authentik-postgresql-0",
   "hub/data-hub-postgres-0",
   "godseye/godseye-auth",
-  "monitoring/kube-prometheus-stack-grafana"
+  "monitoring/kube-prometheus-stack-grafana",
+  "default/petros-models-pvc"
 )
 
 $volumes = (kubectl get volumes.longhorn.io -n longhorn-system -o json | ConvertFrom-Json).items

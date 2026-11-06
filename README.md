@@ -57,7 +57,7 @@ tunnel until Authentik protects it in Phase 1.
 
 ## Backups
 
-Longhorn backs up six volumes to `k8s-storage-folder` on the router every night at 3:30 and keeps
+Longhorn backs up seven volumes to `k8s-storage-folder` on the router every night at 3:30 and keeps
 14 per volume (`platform/longhorn-backup`).
 
 - **See or start backups:** in the hub, **Manage apps**, then **Backups**.
