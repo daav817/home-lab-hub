@@ -13,7 +13,6 @@ const names: Record<string, string> = {
   "default/postgres-data-energia-postgres-0": "Energia database",
   "godseye/godseye-auth": "Godseye logins",
   "hub/data-hub-postgres-0": "Hub database",
-  "default/petros-models-pvc": "Petros AI models",
   "investco/investco-postgres-pvc": "Investco database",
   "monitoring/kube-prometheus-stack-grafana": "Grafana dashboards",
 };
