@@ -7,7 +7,22 @@ import { AppForm } from "../app-form";
 async function NewApp() {
   const user = await currentUser();
   if (user.level !== "admin") redirect("/");
-  return <AppForm action={createApp} />;
+  return (
+    <>
+      <p className="text-muted">
+        Adding a tile doesn&apos;t protect an app.{" "}
+        <a
+          href="https://github.com/daav817/home-lab-hub/blob/main/docs/add-an-app.md"
+          target="_blank"
+          rel="noreferrer"
+          className="underline"
+        >
+          How to add an app
+        </a>
+      </p>
+      <AppForm action={createApp} />
+    </>
+  );
 }
 
 export default function NewAppPage() {
