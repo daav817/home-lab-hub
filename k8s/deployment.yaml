@@ -14,7 +14,8 @@ spec:
       labels:
         app.kubernetes.io/name: hub
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: hub
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -30,6 +31,8 @@ spec:
               value: https://hub.energiapower.llc
             - name: AUTHENTIK_ISSUER
               value: https://auth.energiapower.llc/application/o/home-lab-hub/
+            - name: NODE_EXTRA_CA_CERTS
+              value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
           envFrom:
             - secretRef:
                 name: hub-auth

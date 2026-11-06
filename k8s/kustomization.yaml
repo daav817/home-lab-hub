@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: hub
 resources:
   - namespace.yaml
+  - serviceaccount.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml

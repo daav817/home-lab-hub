@@ -54,3 +54,14 @@ Run these once, in order, from this folder.
 
 The hub is at <https://hub.192.168.1.243.nip.io> on the LAN. It stays off the public
 tunnel until Authentik protects it in Phase 1.
+
+## Backups
+
+Longhorn backs up six volumes to `k8s-storage-folder` on the router every night at 3:30 and keeps
+14 per volume (`platform/longhorn-backup`).
+
+- **See or start backups:** in the hub, **Manage apps**, then **Backups**.
+- **Restore or delete:** only in Longhorn at <https://longhorn.energiapower.llc>, which is admin-only.
+  The hub has no permission to change or delete backups.
+
+To add an app, follow [docs/add-an-app.md](docs/add-an-app.md).

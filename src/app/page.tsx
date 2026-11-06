@@ -2,10 +2,21 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { currentUser } from "@/lib/access";
 import { visibleApps } from "@/lib/apps";
+import { backupWarning } from "@/lib/backups";
 import { listManagedApps } from "@/lib/db";
 import { AppSearch } from "./app-search";
 import { AppTile } from "./app-tile";
 import { SignOutButton } from "./sign-out-button";
+
+async function BackupWarning() {
+  const warning = await backupWarning();
+  if (!warning) return null;
+  return (
+    <Link href="/manage/backups" role="alert" className="panel px-5 py-3 text-(--down)">
+      {warning}
+    </Link>
+  );
+}
 
 async function Portal() {
   const user = await currentUser();
@@ -28,6 +39,11 @@ async function Portal() {
           <SignOutButton />
         </span>
       </div>
+      {user.level === "admin" && (
+        <Suspense fallback={null}>
+          <BackupWarning />
+        </Suspense>
+      )}
       {apps.length === 0 && (
         <p className="panel text-muted p-10 text-center text-lg">No apps have been added for your account yet.</p>
       )}

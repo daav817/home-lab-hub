@@ -1,0 +1,29 @@
+# The hub can view backups and start new ones. It has no update, patch or delete rights,
+# so a bug or a stolen admin session in the hub can't remove data or backups.
+# This lives here, not in k8s/, because that kustomization forces everything into ns hub.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hub-backups
+  namespace: longhorn-system
+rules:
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes", "backups", "backuptargets", "snapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["longhorn.io"]
+    resources: ["snapshots", "backups"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hub-backups
+  namespace: longhorn-system
+subjects:
+  - kind: ServiceAccount
+    name: hub
+    namespace: hub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hub-backups
