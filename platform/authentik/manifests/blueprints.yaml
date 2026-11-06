@@ -435,6 +435,36 @@ data:
       # Login in front of Longhorn, which has none of its own. Admins only: this is where
       # volumes and backups can be deleted. Traefik checks each request with the embedded
       # outpost, see platform/longhorn-backup/manifests/longhorn-ui.yaml.
+      # Signed-in devices must still enter a 2FA code to open Longhorn. Only this app uses
+      # this flow, so the others keep single sign-on. A threshold of 0 means always ask.
+      - id: longhorn-mfa
+        model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+        identifiers:
+          name: longhorn-require-mfa
+        attrs:
+          device_classes:
+            - static
+            - totp
+            - webauthn
+          not_configured_action: deny
+          last_auth_threshold: seconds=0
+
+      - id: longhorn-authorization
+        model: authentik_flows.flow
+        identifiers:
+          slug: longhorn-authorization
+        attrs:
+          name: Longhorn authorization
+          title: Confirm it's you
+          designation: authorization
+          authentication: require_authenticated
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf longhorn-authorization
+          stage: !KeyOf longhorn-mfa
+          order: 0
+
       - id: longhorn-provider
         model: authentik_providers_proxy.proxyprovider
         identifiers:
@@ -442,8 +472,9 @@ data:
         attrs:
           mode: forward_single
           external_host: https://longhorn.energiapower.llc
-          access_token_validity: hours=8
-          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          # How long a browser stays in Longhorn before the next 2FA prompt.
+          access_token_validity: hours=1
+          authorization_flow: !KeyOf longhorn-authorization
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
 
       - id: longhorn-application
