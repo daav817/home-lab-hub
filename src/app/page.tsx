@@ -29,7 +29,7 @@ async function Portal() {
       <AutoRefresh seconds={30} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted">
-          {user.name} · {user.level} access
+          {user.name} · {user.level} access · Version {process.env.APP_VERSION ?? "dev"}
         </p>
         <span className="flex flex-wrap items-center gap-2">
           <AppSearch items={apps.map(({ id, name, description, url }) => ({ id, name, description, url }))} />
