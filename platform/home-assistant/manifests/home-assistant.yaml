@@ -1,0 +1,134 @@
+# Home Assistant: one place to control smart devices, cameras and phone alerts. It keeps its
+# own login with 2FA, because a login page in front of it would break the phone app. It uses
+# the node's network directly so it can discover devices on the home network.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-config
+  namespace: home-assistant
+data:
+  # Copied into /config on every start, so change it here, not in the container.
+  configuration.yaml: |
+    default_config:
+
+    homeassistant:
+      external_url: https://home.energiapower.llc
+      internal_url: http://192.168.1.102:8123
+
+    http:
+      # Requests from the Cloudflare tunnel arrive from a pod address. Trust its record of
+      # the real visitor, so failed logins ban the visitor and not the tunnel.
+      use_x_forwarded_for: true
+      trusted_proxies:
+        - 10.42.0.0/16
+      ip_ban_enabled: true
+      login_attempts_threshold: 5
+
+    automation: !include automations.yaml
+    script: !include scripts.yaml
+    scene: !include scenes.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: home-assistant-config
+  namespace: home-assistant
+  labels:
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/critical-data: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-assistant
+  namespace: home-assistant
+spec:
+  replicas: 1
+  # Only one copy may use the settings volume at a time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: home-assistant
+  template:
+    metadata:
+      labels:
+        app: home-assistant
+    spec:
+      # A fixed node gives Home Assistant a fixed address on the home network.
+      nodeSelector:
+        kubernetes.io/hostname: worker-02
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      initContainers:
+        - name: config
+          image: ghcr.io/home-assistant/home-assistant:2026.10.4
+          command:
+            - sh
+            - -ceu
+            - |
+              cp /seed/configuration.yaml /config/configuration.yaml
+              [ -f /config/automations.yaml ] || echo '[]' > /config/automations.yaml
+              [ -f /config/scenes.yaml ] || echo '[]' > /config/scenes.yaml
+              [ -f /config/scripts.yaml ] || echo '{}' > /config/scripts.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: seed
+              mountPath: /seed
+      containers:
+        - name: home-assistant
+          image: ghcr.io/home-assistant/home-assistant:2026.10.4
+          env:
+            - name: TZ
+              value: America/New_York
+          ports:
+            - name: http
+              containerPort: 8123
+          startupProbe:
+            tcpSocket:
+              port: 8123
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: 8123
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: home-assistant-config
+        - name: seed
+          configMap:
+            name: home-assistant-config
+---
+# Used by the Cloudflare tunnel and the hub's status light.
+apiVersion: v1
+kind: Service
+metadata:
+  name: home-assistant
+  namespace: home-assistant
+spec:
+  selector:
+    app: home-assistant
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
