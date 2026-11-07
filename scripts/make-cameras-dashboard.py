@@ -21,41 +21,62 @@ def reolink(cam, title, preset_icon, preset_name):
             "entities": [arrow("left", "mdi:arrow-left"), arrow("up", "mdi:arrow-up"),
                          arrow("down", "mdi:arrow-down"), arrow("right", "mdi:arrow-right"), preset]}
 
+def press(entity, icon, name):
+    return {"entity": entity, "icon": icon, "name": name,
+            "tap_action": {"action": "perform-action", "perform_action": "button.press",
+                           "target": {"entity_id": entity}}}
+
+
+def controls(device):
+    """Light switch (tap toggles) and night vision selector (tap to choose)."""
+    return [{"entity": f"switch.{device}_light", "name": "Light"},
+            {"entity": f"select.{device}_night_vision", "name": "Night vision", "tap_action": {"action": "more-info"}}]
+
+
 def blink(cam, title, live):
-    """Battery Blink camera. The picture is Blink's latest snapshot, so opening the dashboard
-    never starts a live view (that drains the battery). Buttons:
-    - New snapshot: Blink takes a fresh picture, shown a few seconds later.
-    - Live: opens the live view (the Generic Camera `live`), which starts a Blink session.
-    - Continue: keeps watching when Blink ends a session (a notification asks).
-    """
-    return {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "auto",
-            "entities": [
-                {"entity": f"camera.{cam}", "icon": "mdi:camera-iris", "name": "New snapshot",
-                 "tap_action": {"action": "perform-action", "perform_action": "blink.trigger_camera",
-                                "target": {"entity_id": f"camera.{cam}"}}},
-                {"entity": f"camera.{live}", "icon": "mdi:play", "name": "Live",
-                 "tap_action": {"action": "more-info"}},
-                {"entity": f"button.{cam}_live_view_continue_live_view", "icon": "mdi:play-circle",
-                 "name": "Continue",
-                 "tap_action": {"action": "perform-action", "perform_action": "button.press",
-                                "target": {"entity_id": f"button.{cam}_live_view_continue_live_view"}}},
-            ]}
+    """Battery Blink camera. Shows Blink's latest snapshot, so opening the dashboard never wakes
+    the camera. Start wakes it; once Blink is sending video the tile switches to live video
+    (the Generic Camera `live`) with Stop and Continue. Continue keeps watching when Blink ends
+    a session (a notification asks)."""
+    device = f"{cam}_live_view"
+    state = f"sensor.{device}_live_view"
+    snapshot = {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "auto",
+                "entities": [
+                    {"entity": f"camera.{cam}", "icon": "mdi:camera-iris", "name": "New snapshot",
+                     "tap_action": {"action": "perform-action", "perform_action": "blink.trigger_camera",
+                                    "target": {"entity_id": f"camera.{cam}"}}},
+                    press(f"button.{device}_start_live_view", "mdi:play", "Start live view"),
+                    *controls(device),
+                ]}
+    live_card = {"type": "picture-glance", "title": f"{title} (live)", "camera_image": f"camera.{live}",
+                 "camera_view": "live",
+                 "entities": [
+                     press(f"button.{device}_stop_live_view", "mdi:stop", "Stop live view"),
+                     press(f"button.{device}_continue_live_view", "mdi:play-pause", "Continue"),
+                     *controls(device),
+                 ]}
+    return [
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": ["live", "waiting"]}],
+         "card": snapshot},
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": ["live", "waiting"]}],
+         "card": live_card},
+    ]
 
 
-def live_only(cam, title):
+def live_only(cam, title, device):
     """A camera that's always live through Frigate, like the wired Blink Parking Lot."""
     return {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "live",
-            "entities": [{"entity": f"camera.{cam}", "icon": "mdi:cctv"}]}
+            "entities": [{"entity": f"camera.{cam}", "icon": "mdi:cctv"}, *controls(device)]}
 
 
 garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
 tiles = [garage, basement,
-         live_only("parking_lot_live", "Parking Lot"),
+         live_only("parking_lot_live", "Parking Lot", "parking_lot_live_view"),
          # The Generic Camera live views were named by Home Assistant after the bridge's address:
          # the first is front_door, the "_2" one is front_porch (see their stream URLs).
-         blink("front_door", "Front Door", live="blink_bridge_cameras_svc_cluster_local"),
-         blink("front_porch_and_swings", "Front Porch", live="blink_bridge_cameras_svc_cluster_local_2")]
+         *blink("front_door", "Front Door", live="blink_bridge_cameras_svc_cluster_local"),
+         *blink("front_porch_and_swings", "Front Porch", live="blink_bridge_cameras_svc_cluster_local_2")]
 
 config = {"views": [
     {"title": "All cameras", "path": "all", "type": "panel",
