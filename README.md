@@ -66,4 +66,9 @@ Longhorn backs up six volumes to `k8s-storage-folder` on the router every night 
 
 To prove a backup still restores, run `scripts/restore-test.ps1`. Last passed 2026-11-06, hub database only.
 
+Petros's data lives in Supabase and Google Cloud Storage, so the `petros-export` job copies both to
+the `petros-backups` volume each night, an hour before the Longhorn backup. That volume is detached
+between runs, so **Back up now** doesn't work for it. To prove an export restores, follow
+`scripts/petros-restore-test.yaml`. Last passed 2026-11-06.
+
 To add an app, follow [docs/add-an-app.md](docs/add-an-app.md).
