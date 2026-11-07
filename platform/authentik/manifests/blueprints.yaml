@@ -548,6 +548,41 @@ data:
           group: !Find [authentik_core.group, [name, authentik Admins]]
           order: 0
 
+      # Frigate: admins and hub-family, with normal single sign-on. Frigate reads the user and
+      # groups from the login and gives admins full control and family view-only access.
+      # See platform/cameras/manifests/frigate.yaml.
+      - id: frigate-provider
+        model: authentik_providers_proxy.proxyprovider
+        identifiers:
+          name: frigate
+        attrs:
+          mode: forward_single
+          external_host: https://frigate.energiapower.llc
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+
+      - id: frigate-application
+        model: authentik_core.application
+        identifiers:
+          slug: frigate
+        attrs:
+          name: Frigate
+          provider: !KeyOf frigate-provider
+          meta_launch_url: https://frigate.energiapower.llc
+          policy_engine_mode: any
+
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf frigate-application
+          group: !Find [authentik_core.group, [name, authentik Admins]]
+          order: 0
+
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf frigate-application
+          group: !KeyOf group-family
+          order: 10
+
       # Every provider of this kind must be listed here.
       - model: authentik_outposts.outpost
         identifiers:
@@ -562,3 +597,4 @@ data:
             - !KeyOf longhorn-provider
             - !KeyOf prometheus-provider
             - !KeyOf alertmanager-provider
+            - !KeyOf frigate-provider

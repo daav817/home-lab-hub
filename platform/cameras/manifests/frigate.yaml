@@ -1,0 +1,363 @@
+# Frigate: AI detection and recordings for cameras with a local stream. It runs on worker-02,
+# which can reach the IOT network and has the Intel graphics used for detection and decoding.
+# Logins go through Authentik: admins get full control, hub-family can view.
+#
+# Recordings go on a fixed-size volume, so they can't fill the node's disk. Frigate deletes the
+# oldest recordings itself when the volume gets full. To change the cap, resize frigate-media.
+
+# One copy only, kept on the node that uses it. Recordings are replaceable, so they don't need
+# Longhorn's three copies or a backup.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-single
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  numberOfReplicas: "1"
+  dataLocality: strict-local
+  staleReplicaTimeout: "30"
+  fsType: ext4
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: frigate-media
+  namespace: cameras
+  labels:
+    # Recordings change constantly, so keep snapshots from piling up, and don't back them up.
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/metrics: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn-single
+  resources:
+    requests:
+      storage: 100Gi
+---
+# Settings and the event database, backed up nightly.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: frigate-config
+  namespace: cameras
+  labels:
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/critical-data: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frigate-config-seed
+  namespace: cameras
+data:
+  # Copied to /config/config.yml only if there isn't one yet. After that, change settings in
+  # Frigate's own Settings pages, which save to that file.
+  config.yml: |
+    mqtt:
+      enabled: false
+
+    # Authentik handles logins. It passes the user and their groups, which map to Frigate roles.
+    auth:
+      enabled: false
+    tls:
+      enabled: false
+    proxy:
+      separator: "|"
+      header_map:
+        user: x-authentik-username
+        role: x-authentik-groups
+        role_map:
+          admin:
+            - authentik Admins
+          viewer:
+            - hub-family
+      default_role: viewer
+
+    detectors:
+      ov:
+        type: openvino
+        device: GPU
+
+    model:
+      width: 300
+      height: 300
+      input_tensor: nhwc
+      input_pixel_format: bgr
+      path: /openvino-model/ssdlite_mobilenet_v2.xml
+      labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+    ffmpeg:
+      hwaccel_args: preset-vaapi
+
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+
+    objects:
+      track:
+        - person
+        - car
+        - dog
+        - cat
+
+    # Alerts are what you'd want on your phone. Detections are kept, but quieter.
+    review:
+      alerts:
+        labels:
+          - person
+          - car
+      detections:
+        labels:
+          - dog
+          - cat
+
+    # Only keep video around activity: alerts for 30 days, other detections for 14.
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        retain:
+          days: 30
+          mode: motion
+      detections:
+        retain:
+          days: 14
+          mode: motion
+
+    snapshots:
+      enabled: true
+      retain:
+        default: 30
+
+    cameras:
+      garage:
+        ffmpeg:
+          inputs:
+            - path: rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/garage/main
+              input_args: preset-rtsp-generic
+              roles:
+                - detect
+                - record
+      basement:
+        ffmpeg:
+          inputs:
+            - path: rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/basement/main
+              input_args: preset-rtsp-generic
+              roles:
+                - detect
+                - record
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frigate
+  namespace: cameras
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: frigate
+  template:
+    metadata:
+      labels:
+        app: frigate
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker-02
+      automountServiceAccountToken: false
+      initContainers:
+        - name: seed-config
+          image: ghcr.io/blakeblackshear/frigate:0.18.2
+          command:
+            - sh
+            - -c
+            - '[ -f /config/config.yml ] || cp /seed/config.yml /config/config.yml'
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: seed
+              mountPath: /seed
+      containers:
+        - name: frigate
+          image: ghcr.io/blakeblackshear/frigate:0.18.2
+          envFrom:
+            - secretRef:
+                name: camera-streams
+          env:
+            - name: TZ
+              value: America/New_York
+          ports:
+            - name: internal
+              containerPort: 5000
+            - name: http
+              containerPort: 8971
+          startupProbe:
+            httpGet:
+              path: /api/version
+              port: 5000
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /api/version
+              port: 5000
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+              gpu.intel.com/i915: "1"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: media
+              mountPath: /media/frigate
+            - name: shm
+              mountPath: /dev/shm
+            - name: cache
+              mountPath: /tmp/cache
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: frigate-config
+        - name: media
+          persistentVolumeClaim:
+            claimName: frigate-media
+        - name: seed
+          configMap:
+            name: frigate-config-seed
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+        - name: cache
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frigate
+  namespace: cameras
+spec:
+  selector:
+    app: frigate
+  ports:
+    - name: http
+      port: 8971
+      targetPort: 8971
+    - name: internal
+      port: 5000
+      targetPort: 5000
+---
+# Port 8971 trusts the user and role headers, so only Traefik (after Authentik) and the hub's
+# status light may reach it. Port 5000 has no login at all, so only Home Assistant may use it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frigate
+  namespace: cameras
+spec:
+  podSelector:
+    matchLabels:
+      app: frigate
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: hub
+      ports:
+        - port: 8971
+          protocol: TCP
+    - from:
+        - ipBlock:
+            cidr: 192.168.1.102/32
+      ports:
+        - port: 5000
+          protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik
+  namespace: cameras
+spec:
+  forwardAuth:
+    address: http://authentik-server.authentik.svc.cluster.local/outpost.goauthentik.io/auth/traefik
+    trustForwardHeader: true
+    # Passes who signed in, and their groups, on to Frigate. These replace any copies a visitor sends.
+    authResponseHeaders:
+      - X-authentik-username
+      - X-authentik-groups
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frigate-ui
+  namespace: cameras
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: cameras-authentik@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: frigate.energiapower.llc
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frigate
+                port:
+                  number: 8971
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frigate-login
+  namespace: authentik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: frigate.energiapower.llc
+      http:
+        paths:
+          - path: /outpost.goauthentik.io
+            pathType: Prefix
+            backend:
+              service:
+                name: authentik-server
+                port:
+                  number: 80
