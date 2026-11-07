@@ -1,0 +1,110 @@
+# Neolink turns the Reolink E1 cameras, which have no local video stream of their own, into
+# streams that Frigate and Home Assistant can use. It runs on worker-02, the only node that can
+# reach the IOT network, and talks to the cameras directly, never through Reolink's servers.
+# Its config, with the camera logins, is the sealed secret neolink-config, made by
+# scripts/seal-neolink.ps1.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neolink
+  namespace: cameras
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: neolink
+  template:
+    metadata:
+      labels:
+        app: neolink
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker-02
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: neolink
+          # The last build, from 2025-01-30. The project isn't actively maintained.
+          image: quantumentangledandy/neolink@sha256:4eebf499c20f8de740d8c32163f665e41fd0f342be3b1174828b3b8bd7def59d
+          command: ["/usr/local/bin/neolink"]
+          args: ["rtsp", "--config=/etc/neolink/neolink.toml"]
+          ports:
+            - name: rtsp
+              containerPort: 8554
+          startupProbe:
+            tcpSocket:
+              port: 8554
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            tcpSocket:
+              port: 8554
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/neolink
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          secret:
+            secretName: neolink-config
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neolink
+  namespace: cameras
+spec:
+  selector:
+    app: neolink
+  ports:
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+---
+# Only the camera apps may open the streams: anything in this namespace (Frigate, later) and
+# Home Assistant, which uses worker-02's own address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: neolink
+  namespace: cameras
+spec:
+  podSelector:
+    matchLabels:
+      app: neolink
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - ipBlock:
+            cidr: 192.168.1.102/32
+      ports:
+        - port: 8554
+          protocol: TCP
