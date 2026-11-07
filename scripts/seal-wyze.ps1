@@ -22,15 +22,28 @@ $values = [ordered]@{
   WYZE_PASSWORD = Read-Hidden "Wyze account password"
   WYZE_API_ID   = (Read-Hidden "Wyze API ID").Trim()
   WYZE_API_KEY  = (Read-Hidden "Wyze API key").Trim()
-  # Authenticator keys are often shown in groups with spaces. Those aren't part of the key.
-  WYZE_TOTP_KEY = ((Read-Hidden "Wyze authenticator key") -replace '\s', '').ToUpper()
+  WYZE_TOTP_KEY = Read-Hidden "Wyze authenticator key (the key, or KeePassXC's otpauth:// link)"
 }
+# Accept KeePassXC's otpauth:// link by taking its secret, and drop the spaces and dashes some
+# apps use to group the key. Neither is part of the key.
+$totp = $values.WYZE_TOTP_KEY.Trim()
+if ($totp -match '^otpauth://') {
+  if ($totp -match '[?&]secret=([^&]+)') { $totp = [Uri]::UnescapeDataString($Matches[1]) }
+  else { throw "That otpauth:// link has no secret in it. Nothing was saved." }
+}
+$values.WYZE_TOTP_KEY = ($totp -replace '[\s-]', '').ToUpper()
+
 foreach ($name in $values.Keys) {
   if (-not $values[$name]) { throw "$name was empty. Nothing was saved." }
 }
 if ($values.WYZE_TOTP_KEY -notmatch '^[A-Z2-7]+=*$') {
-  throw "The authenticator key should only contain the letters A-Z and the digits 2-7. Nothing was saved."
+  # Say what kind of character is wrong, without showing the key.
+  $kinds = @()
+  if ($values.WYZE_TOTP_KEY -match '[0189]') { $kinds += "the digits 0, 1, 8 or 9" }
+  if ($values.WYZE_TOTP_KEY -match '[^A-Z0-9=]') { $kinds += "symbols or punctuation" }
+  throw ("The authenticator key has " + ($kinds -join " and ") + ", which keys don't use. Check you copied the key itself, not a 6-digit code. Nothing was saved.")
 }
+Write-Host "Authenticator key looks right ($($values.WYZE_TOTP_KEY.Length) characters)."
 
 $encoded = @{}
 foreach ($name in $values.Keys) {
