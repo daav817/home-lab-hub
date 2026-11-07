@@ -1,8 +1,13 @@
 # Wyze bridge: turns Wyze cameras into local streams for Frigate. It signs in to Wyze's cloud to
 # find the cameras, then pulls video straight from them over the IOT network, so it runs on
 # worker-02. The Wyze login is the sealed secret wyze-bridge, made by scripts/seal-wyze.ps1.
-# Streams need the same login as the Neolink ones (secret camera-streams). The web page has no
-# login, so nothing outside this namespace can reach the bridge.
+# Streams need the same login as the Neolink ones (secret camera-streams).
+#
+# It uses worker-02's own network: Wyze cameras send video back to the bridge over UDP, which
+# the cluster's address translation breaks ("discovery timeout"). worker-02's firewall
+# (scripts/worker-02-firewall.sh) lets UDP in from the two Wyze cameras only, and blocks the
+# bridge's ports from the main network, since its web page and go2rtc page have no login.
+# Frigate reaches the streams from inside worker-02.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -35,6 +40,8 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: worker-02
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       automountServiceAccountToken: false
       containers:
         - name: wyze-bridge
@@ -96,22 +103,3 @@ spec:
     - name: rtsp
       port: 8554
       targetPort: 8554
----
-# Only the camera apps in this namespace (Frigate) may open the streams.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: wyze-bridge
-  namespace: cameras
-spec:
-  podSelector:
-    matchLabels:
-      app: wyze-bridge
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector: {}
-      ports:
-        - port: 8554
-          protocol: TCP
