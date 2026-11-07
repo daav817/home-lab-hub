@@ -301,9 +301,14 @@ spec:
     - name: internal
       port: 5000
       targetPort: 5000
+    # go2rtc's restream, which Home Assistant plays the live video from.
+    - name: restream
+      port: 8554
+      targetPort: 8554
 ---
 # Port 8971 trusts the user and role headers, so only Traefik (after Authentik) and the hub's
-# status light may reach it. Port 5000 has no login at all, so only Home Assistant may use it.
+# status light may reach it. Ports 5000 and 8554 (live video) have no login at all, so only
+# Home Assistant may use them.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -331,6 +336,8 @@ spec:
             cidr: 192.168.1.102/32
       ports:
         - port: 5000
+          protocol: TCP
+        - port: 8554
           protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
