@@ -15,18 +15,13 @@ data:
       external_url: https://home.energiapower.llc
       internal_url: http://192.168.1.102:8123
 
-    http:
-      # The Cloudflare tunnel reaches Home Assistant from a pod address on the same node, or
-      # from another node's address. Trust only those for the real visitor's address, so
-      # failed logins ban the visitor and not the tunnel.
-      use_x_forwarded_for: true
-      trusted_proxies:
-        - 10.42.0.0/16
-        - 192.168.1.100
-        - 192.168.1.101
-        - 192.168.1.102
-      ip_ban_enabled: true
-      login_attempts_threshold: 5
+    # Home Assistant no longer reads "http:" from this file. It's set under Settings, System,
+    # Network, which tries a change and asks you to keep it. The settings in use:
+    #   Use X-Forwarded-For: on
+    #   Trusted proxies: 10.42.0.0/16, 192.168.1.100, 192.168.1.101, 192.168.1.102
+    #   IP ban: on, after 5 failed logins
+    # The Cloudflare tunnel reaches Home Assistant from a pod address on the same node, or
+    # from another node's address. Trusting only those lets a ban hit the real visitor.
 
     automation: !include automations.yaml
     script: !include scripts.yaml
