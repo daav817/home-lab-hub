@@ -72,3 +72,13 @@ between runs, so **Back up now** doesn't work for it. To prove an export restore
 `scripts/petros-restore-test.yaml`. Last passed 2026-11-06.
 
 To add an app, follow [docs/add-an-app.md](docs/add-an-app.md).
+
+## Cluster networking
+
+Calico picks each node's address from `192.168.1.0/24` only, so a second network connection on a
+node (such as the IOT VLAN) can't become its cluster address. This lives in the cluster, not in git.
+It was set on 2026-11-07 with:
+
+```powershell
+kubectl patch installation default --type merge -p '{"spec":{"calicoNetwork":{"nodeAddressAutodetectionV4":{"firstFound":null,"cidrs":["192.168.1.0/24"]}}}}'
+```
