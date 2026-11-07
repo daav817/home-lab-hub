@@ -16,11 +16,15 @@ data:
       internal_url: http://192.168.1.102:8123
 
     http:
-      # Requests from the Cloudflare tunnel arrive from a pod address. Trust its record of
-      # the real visitor, so failed logins ban the visitor and not the tunnel.
+      # The Cloudflare tunnel reaches Home Assistant from a pod address on the same node, or
+      # from another node's address. Trust only those for the real visitor's address, so
+      # failed logins ban the visitor and not the tunnel.
       use_x_forwarded_for: true
       trusted_proxies:
         - 10.42.0.0/16
+        - 192.168.1.100
+        - 192.168.1.101
+        - 192.168.1.102
       ip_ban_enabled: true
       login_attempts_threshold: 5
 
