@@ -1,0 +1,8 @@
+# petros-backups is only attached while its export runs, and Longhorn skips detached volumes
+# unless this is on. Longhorn attaches the volume for the job, then detaches it again.
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: allow-recurring-job-while-volume-detached
+  namespace: longhorn-system
+value: "true"

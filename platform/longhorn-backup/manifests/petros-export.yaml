@@ -1,0 +1,134 @@
+# Copies Petros's Supabase database and model bucket into the cluster each night. The nightly
+# Longhorn backup then takes this volume to the router, which gives Petros a copy that doesn't
+# depend on Supabase or Google, and 14 days of history. The job reads the existing Petros
+# secrets, so no password is stored here.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: petros-backups
+  namespace: default
+  labels:
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/critical-data: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: petros-export
+  namespace: default
+spec:
+  # One hour before the nightly Longhorn backup.
+  schedule: "30 7 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          initContainers:
+            - name: database
+              image: postgres:17.11-trixie
+              command:
+                - sh
+                - -ceu
+                - |
+                  # pg_dump needs a session connection, which Supabase serves on port 5432.
+                  url=$(printf '%s' "$DATABASE_URL" | sed -e 's#^postgresql+[a-z0-9]*://#postgresql://#' -e 's#^postgres://#postgresql://#' -e 's#:6543/#:5432/#')
+                  mkdir -p /backup/database
+                  file=/backup/database/petros-$(date -u +%F).dump
+                  pg_dump --dbname="$url" --schema=public --no-owner --no-privileges --format=custom --file="$file.partial"
+                  pg_restore --list "$file.partial" > /dev/null
+                  mv "$file.partial" "$file"
+                  ls -1t /backup/database/*.dump | tail -n +8 | xargs -r rm -f
+                  echo "Database export finished: $(du -h "$file" | cut -f1)"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: petros-secrets
+                      key: DATABASE_URL
+                - name: PGSSLMODE
+                  value: require
+                - name: HOME
+                  value: /tmp
+              securityContext: &locked
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources: &small
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: tmp
+                  mountPath: /tmp
+          containers:
+            # "copy" never removes anything here, so a model deleted from the bucket stays.
+            - name: models
+              image: rclone/rclone:1.69.1
+              args:
+                - copy
+                - :gcs:petros-agent-models-prod
+                - /backup/models
+                - --gcs-service-account-file=/var/secrets/google/key.json
+                - --gcs-bucket-policy-only
+                - --stats-one-line
+                - --verbose
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: RCLONE_CONFIG
+                  value: /tmp/rclone.conf
+              securityContext: *locked
+              resources: *small
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: tmp
+                  mountPath: /tmp
+                - name: gcp-key
+                  mountPath: /var/secrets/google
+                  readOnly: true
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: petros-backups
+            - name: tmp
+              emptyDir: {}
+            - name: gcp-key
+              secret:
+                secretName: gcp-gcs-key
+                defaultMode: 0440

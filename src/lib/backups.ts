@@ -10,6 +10,7 @@ const lateAfter = 30 * 60 * 60 * 1000;
 
 const names: Record<string, string> = {
   "authentik/data-authentik-postgresql-0": "Authentik logins",
+  "default/petros-backups": "Petros export",
   "default/postgres-data-energia-postgres-0": "Energia database",
   "godseye/godseye-auth": "Godseye logins",
   "hub/data-hub-postgres-0": "Hub database",

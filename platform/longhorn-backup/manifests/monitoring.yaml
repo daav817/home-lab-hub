@@ -46,6 +46,13 @@ spec:
             severity: critical
           annotations:
             summary: Prometheus has no Longhorn data, so backup and storage alerts can't fire.
+        - alert: PetrosExportOverdue
+          expr: (time() - kube_cronjob_status_last_successful_time{namespace="default",cronjob="petros-export"} > 108000) or absent(kube_cronjob_status_last_successful_time{namespace="default",cronjob="petros-export"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Petros's database and models haven't been exported for over 30 hours. Supabase may be paused.
         # States: 0 new, 1 pending, 2 in progress, 3 completed, 4 error, 5 unknown.
         - alert: LonghornBackupFailed
           expr: max by (backup, volume) (longhorn_backup_state) == 4
