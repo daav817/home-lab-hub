@@ -17,15 +17,16 @@ WYZE_CAMERAS="192.168.0.15, 192.168.0.240"
 BRIDGE_TCP_PORTS="1984, 5080, 8554, 8888, 8889"
 BRIDGE_UDP_PORTS="8189"
 
-cp /etc/iot-wifi-guard.nft "/etc/iot-wifi-guard.nft.$(date +%Y%m%d-%H%M%S).bak"
-cat > /etc/iot-wifi-guard.nft <<EOF
+# Written to a temporary file and checked first, so a mistake never replaces a working file.
+NEW=$(mktemp)
+cat > "$NEW" <<EOF
 table inet iot_wifi_guard
 delete table inet iot_wifi_guard
 table inet iot_wifi_guard {
   chain input {
     type filter hook input priority -10; policy accept;
     iifname "wlp1s0" ct state established,related accept
-    iifname "wlp1s0" ip saddr { $WYZE_CAMERAS } udp accept
+    iifname "wlp1s0" ip saddr { $WYZE_CAMERAS } meta l4proto udp accept
     iifname "wlp1s0" drop
     iifname "eno1" tcp dport { $BRIDGE_TCP_PORTS } drop
     iifname "eno1" udp dport { $BRIDGE_UDP_PORTS } drop
@@ -37,7 +38,10 @@ table inet iot_wifi_guard {
   }
 }
 EOF
-nft -c -f /etc/iot-wifi-guard.nft
+nft -c -f "$NEW"
+cp /etc/iot-wifi-guard.nft "/etc/iot-wifi-guard.nft.$(date +%Y%m%d-%H%M%S).bak"
+install -m 0644 "$NEW" /etc/iot-wifi-guard.nft
+rm -f "$NEW"
 systemctl restart iot-wifi-guard.service
 systemctl is-active iot-wifi-guard.service
 nft list table inet iot_wifi_guard
