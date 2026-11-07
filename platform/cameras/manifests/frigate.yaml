@@ -150,13 +150,15 @@ data:
 
     # go2rtc is the only reader of each Neolink stream. It takes video and sound, feeds the
     # live view (with sound), and re-serves the stream to Frigate's detection and recording.
-    # A reader that ignores the sound makes Neolink's memory grow until it's killed.
+    # The cameras send raw PCM sound, which browsers can't play, so go2rtc adds an AAC copy.
     go2rtc:
       streams:
         garage:
           - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/garage/main
+          - "ffmpeg:garage#audio=aac"
         basement:
           - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/basement/main
+          - "ffmpeg:basement#audio=aac"
 
     cameras:
       garage:
