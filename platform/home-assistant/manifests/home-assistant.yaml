@@ -78,6 +78,23 @@ spec:
               [ -f /config/automations.yaml ] || echo '[]' > /config/automations.yaml
               [ -f /config/scenes.yaml ] || echo '[]' > /config/scenes.yaml
               [ -f /config/scripts.yaml ] || echo '{}' > /config/scripts.yaml
+
+              # Frigate's Home Assistant integration, normally installed through HACS. This
+              # installs one pinned release, checked against its known checksum, and only when
+              # the installed version differs. To update, change both values below.
+              version=5.15.6
+              sha256=a759a2fa7c773e90f8560f1d212c9a30ca26e786309a03350ae5b468b2ecd7aa
+              target=/config/custom_components/frigate
+              if [ "$(cat "$target/.installed-version" 2>/dev/null)" != "$version" ]; then
+                cd /tmp
+                curl -fsSL -o frigate.tgz "https://github.com/blakeblackshear/frigate-hass-integration/archive/refs/tags/v$version.tar.gz"
+                echo "$sha256  frigate.tgz" | sha256sum -c -
+                tar xzf frigate.tgz
+                rm -rf "$target" && mkdir -p /config/custom_components
+                mv "frigate-hass-integration-$version/custom_components/frigate" "$target"
+                echo "$version" > "$target/.installed-version"
+                echo "Installed the Frigate integration $version"
+              fi
           volumeMounts:
             - name: config
               mountPath: /config
