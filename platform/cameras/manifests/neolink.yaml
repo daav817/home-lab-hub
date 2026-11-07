@@ -30,6 +30,31 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
+      # Neolink connects to both the main and sub stream by default. Nothing reads the sub
+      # stream, and its unread data grows Neolink's memory until it's killed. This copies the
+      # sealed config and adds stream = "mainStream" to each camera, without reading passwords.
+      initContainers:
+        - name: main-stream-only
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - >-
+              awk '{print} /^discovery = "local"$/ {print "stream = \"mainStream\""}'
+              /secret/neolink.toml > /etc/neolink/neolink.toml &&
+              grep -c '^stream = "mainStream"$' /etc/neolink/neolink.toml
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: sealed-config
+              mountPath: /secret
+              readOnly: true
+            - name: config
+              mountPath: /etc/neolink
       containers:
         - name: neolink
           # The last build, from 2025-01-30. The project isn't actively maintained.
@@ -73,10 +98,16 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: config
+        - name: sealed-config
           secret:
             secretName: neolink-config
             defaultMode: 0440
+        # The config with the stream setting added. In memory only, so the logins never
+        # reach a disk.
+        - name: config
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
         - name: tmp
           emptyDir: {}
 ---
