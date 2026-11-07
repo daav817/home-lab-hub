@@ -102,6 +102,9 @@ spec:
           volumeMounts:
             - name: run
               mountPath: /mosquitto/run
+            # mosquitto_passwd writes a temporary file while it works.
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: mosquitto
           image: eclipse-mosquitto:2.0.22
@@ -140,6 +143,10 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: mosquitto-data
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
 ---
 apiVersion: v1
 kind: Service
