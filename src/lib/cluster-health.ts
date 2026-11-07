@@ -16,6 +16,17 @@ export type NodeHealth = {
   disk: number | null;
 };
 
+export type PodUsage = { namespace: string; pod: string; memory: number; cpu: number };
+
+export type NodeWorkload = {
+  name: string;
+  memoryTotal: number | null;
+  memoryUsed: number | null;
+  // Memory in use by anything that isn't a pod, such as k3s, etcd, containerd and the OS.
+  outsidePods: number | null;
+  pods: PodUsage[];
+};
+
 export type ActiveAlert = { id: string; name: string; severity: string; summary: string; since: Date };
 
 export type RawAlert = {
@@ -65,6 +76,47 @@ export function buildNodes(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Container metrics carry the node's name. Memory figures come from node exporter, by IP.
+export function buildWorkloads(
+  info: Sample[],
+  memoryTotal: Sample[],
+  memoryAvailable: Sample[],
+  podMemory: Sample[],
+  podCpu: Sample[],
+): NodeWorkload[] {
+  const totalByInstance = byLabel(memoryTotal, "instance");
+  const availableByInstance = byLabel(memoryAvailable, "instance");
+  const key = ({ metric }: Sample) => `${metric.node}/${metric.namespace}/${metric.pod}`;
+  const cpuByPod = new Map(podCpu.map((sample) => [key(sample), Number(sample.value[1])]));
+
+  return info
+    .map(({ metric }) => {
+      const instance = `${metric.internal_ip}:9100`;
+      const total = totalByInstance.get(instance) ?? null;
+      const available = availableByInstance.get(instance) ?? null;
+      const used = total !== null && available !== null ? total - available : null;
+      const pods = podMemory
+        .filter((sample) => sample.metric.node === metric.node)
+        .map((sample) => ({
+          namespace: sample.metric.namespace,
+          pod: sample.metric.pod,
+          memory: Number(sample.value[1]),
+          cpu: cpuByPod.get(key(sample)) ?? 0,
+        }))
+        .sort((a, b) => b.memory - a.memory);
+      const inPods = pods.reduce((sum, pod) => sum + pod.memory, 0);
+
+      return {
+        name: metric.node,
+        memoryTotal: total,
+        memoryUsed: used,
+        outsidePods: used === null ? null : Math.max(0, used - inPods),
+        pods,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 const severityOrder = ["critical", "warning", "info"];
 
 export function toActiveAlerts(alerts: RawAlert[]): ActiveAlert[] {
@@ -94,18 +146,24 @@ export async function readAlerts() {
 }
 
 export async function readClusterHealth() {
-  const [info, ready, cpu, memory, disk, unhealthy, alerts] = await Promise.all([
-    query("kube_node_info"),
-    query('kube_node_status_condition{condition="Ready",status="true"}'),
-    query("instance:node_cpu_utilisation:rate5m"),
-    query("instance:node_memory_utilisation:ratio"),
-    query("max by (node) (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes)"),
-    query("count(max by (volume) (longhorn_volume_robustness) >= 2)"),
-    readAlerts(),
-  ]);
+  const [info, ready, cpu, memory, disk, unhealthy, memoryTotal, memoryAvailable, podMemory, podCpu, alerts] =
+    await Promise.all([
+      query("kube_node_info"),
+      query('kube_node_status_condition{condition="Ready",status="true"}'),
+      query("instance:node_cpu_utilisation:rate5m"),
+      query("instance:node_memory_utilisation:ratio"),
+      query("max by (node) (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes)"),
+      query("count(max by (volume) (longhorn_volume_robustness) >= 2)"),
+      query("node_memory_MemTotal_bytes"),
+      query("node_memory_MemAvailable_bytes"),
+      query('sum by (node, namespace, pod) (container_memory_working_set_bytes{container!="",container!="POD"})'),
+      query('sum by (node, namespace, pod) (rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))'),
+      readAlerts(),
+    ]);
 
   return {
     nodes: buildNodes(info, ready, cpu, memory, disk),
+    workloads: buildWorkloads(info, memoryTotal, memoryAvailable, podMemory, podCpu),
     unhealthyVolumes: unhealthy.length > 0 ? Number(unhealthy[0].value[1]) : 0,
     alerts,
     checkedAt: new Date(),

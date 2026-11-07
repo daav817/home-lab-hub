@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/access";
-import { readClusterHealth, type ActiveAlert, type NodeHealth } from "@/lib/cluster-health";
+import { readClusterHealth, type ActiveAlert, type NodeHealth, type NodeWorkload } from "@/lib/cluster-health";
 import { AutoRefresh } from "../../auto-refresh";
+import { RefreshButton } from "./refresh-button";
 
 const grafanaUrl = "https://grafana.energiapower.llc";
 const longhornUrl = "https://longhorn.energiapower.llc";
@@ -47,6 +48,55 @@ function NodeCard({ node }: { node: NodeHealth }) {
   );
 }
 
+function size(bytes: number | null) {
+  if (bytes === null) return "No data";
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`;
+}
+
+function WorkloadPanel({ node }: { node: NodeWorkload }) {
+  return (
+    <details className="panel px-5 py-3">
+      <summary className="cursor-pointer">
+        <span className="font-medium">{node.name}</span>
+        <span className="text-muted text-sm">
+          {` · ${size(node.memoryUsed)} of ${size(node.memoryTotal)} memory in use · ${node.pods.length} pods`}
+        </span>
+      </summary>
+      <p className="text-muted py-2 text-sm">
+        Outside pods: {size(node.outsidePods)} (k3s, etcd, containerd, the operating system and anything else
+        installed on the machine).
+      </p>
+      <table className="w-full table-fixed text-sm">
+        <thead className="text-muted text-left">
+          <tr>
+            <th scope="col" className="py-1 font-normal">
+              Pod
+            </th>
+            <th scope="col" className="w-20 py-1 text-right font-normal">
+              Memory
+            </th>
+            <th scope="col" className="w-16 py-1 text-right font-normal">
+              CPU
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-foreground/10">
+          {node.pods.map((pod) => (
+            <tr key={`${pod.namespace}/${pod.pod}`}>
+              <td className="truncate py-1" title={`${pod.namespace}/${pod.pod}`}>
+                {pod.pod}
+                <span className="text-muted"> · {pod.namespace}</span>
+              </td>
+              <td className="py-1 text-right">{size(pod.memory)}</td>
+              <td className="py-1 text-right">{pod.cpu.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
 function AlertRow({ alert, now }: { alert: ActiveAlert; now: number }) {
   const minutes = Math.max(0, Math.floor((now - alert.since.getTime()) / 60_000));
   const age = minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h`;
@@ -80,6 +130,7 @@ async function Health() {
   return (
     <>
       <AutoRefresh seconds={30} />
+      <RefreshButton checkedAt={health.checkedAt.toISOString()} />
       <section className="panel flex flex-col px-5 py-3">
         <h2 className="text-xl font-medium">Alerts</h2>
         {health.alerts.length === 0 ? (
@@ -99,6 +150,13 @@ async function Health() {
             <NodeCard key={node.name} node={node} />
           ))}
         </ul>
+      </section>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xl font-medium">Inside each node</h2>
+        <p className="text-muted text-sm">CPU is the number of cores in use, averaged over 5 minutes.</p>
+        {health.workloads.map((node) => (
+          <WorkloadPanel key={node.name} node={node} />
+        ))}
       </section>
       <p className={health.unhealthyVolumes > 0 ? "panel p-5 text-(--down)" : "panel text-muted p-5"}>
         {health.unhealthyVolumes > 0
