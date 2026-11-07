@@ -45,13 +45,31 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: wyze-bridge
-          # Release 4.5.0 (2026-07-02) from the maintained IDisposable fork. Both it and
-          # 4.6.1-beta.1 get "discovery timeout" from the Pan v1 cameras.
-          image: idisposablegithub365/wyze-bridge@sha256:708903d2882c76966ecb29763a075372d89773aa6796d0aab70f04369cc6d521
-          envFrom:
-            - secretRef:
-                name: wyze-bridge
+          # The original bridge (mrlt8, release 2.10.3, 2024-09-13). It uses Wyze's own TUTK
+          # library, which the Pan v1 needs: the maintained IDisposable fork (4.5.0 and
+          # 4.6.1-beta.1) got "discovery timeout" from these cameras. Not updated since 2024.
+          image: mrlt8/wyze-bridge@sha256:af2d638a6d6d52e15ddcfb711e5b905e484b1f519986ad33b9be562b6277b987
           env:
+            - name: WYZE_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: wyze-bridge
+                  key: WYZE_EMAIL
+            - name: WYZE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wyze-bridge
+                  key: WYZE_PASSWORD
+            - name: API_ID
+              valueFrom:
+                secretKeyRef:
+                  name: wyze-bridge
+                  key: WYZE_API_ID
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wyze-bridge
+                  key: WYZE_API_KEY
             - name: FRIGATE_RTSP_USER
               valueFrom:
                 secretKeyRef:
@@ -62,22 +80,18 @@ spec:
                 secretKeyRef:
                   name: camera-streams
                   key: FRIGATE_RTSP_PASSWORD
+            # Streams need the same login as the Neolink ones.
             - name: STREAM_AUTH
               value: "$(FRIGATE_RTSP_USER):$(FRIGATE_RTSP_PASSWORD)"
-            - name: STATE_DIR
-              value: /config
             - name: TZ
               value: America/New_York
           ports:
             - name: rtsp
               containerPort: 8554
             - name: web
-              containerPort: 5080
+              containerPort: 5000
           securityContext:
             allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
           resources:
             requests:
               cpu: 100m
@@ -86,7 +100,7 @@ spec:
               memory: 1Gi
           volumeMounts:
             - name: config
-              mountPath: /config
+              mountPath: /tokens
       volumes:
         - name: config
           persistentVolumeClaim:
