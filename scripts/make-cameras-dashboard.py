@@ -52,8 +52,10 @@ garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
 tiles = [garage, basement,
          live_only("parking_lot_live", "Parking Lot"),
-         blink("front_door", "Front Door", live="front_door_live"),
-         blink("front_porch_and_swings", "Front Porch", live="front_porch_live")]
+         # The Generic Camera live views were named by Home Assistant after the bridge's address:
+         # the first is front_door, the "_2" one is front_porch (see their stream URLs).
+         blink("front_door", "Front Door", live="blink_bridge_cameras_svc_cluster_local"),
+         blink("front_porch_and_swings", "Front Porch", live="blink_bridge_cameras_svc_cluster_local_2")]
 
 config = {"views": [
     {"title": "All cameras", "path": "all", "type": "panel",
