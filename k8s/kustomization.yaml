@@ -13,4 +13,4 @@ resources:
   - postgres.yaml
 images:
   - name: ghcr.io/daav817/home-lab-hub
-    newTag: "0.1.0.17"
+    newTag: "0.1.0.18"
