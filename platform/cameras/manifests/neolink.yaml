@@ -57,8 +57,8 @@ spec:
               mountPath: /etc/neolink
       containers:
         - name: neolink
-          # The last build, from 2025-01-30. The project isn't actively maintained.
-          image: quantumentangledandy/neolink@sha256:4eebf499c20f8de740d8c32163f665e41fd0f342be3b1174828b3b8bd7def59d
+          # Release v0.6.2. The 2025-01-30 build stalled when limited to the main stream.
+          image: quantumentangledandy/neolink@sha256:5d67d8b59631281ca8dd079ab3e0ada3d85f491d64a9e2f71533c89883574697
           command: ["/usr/local/bin/neolink"]
           args: ["rtsp", "--config=/etc/neolink/neolink.toml"]
           # Neolink saves small settings and a font cache under the home folder.
