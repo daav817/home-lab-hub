@@ -58,6 +58,13 @@ spec:
                 "$NEOLINK_MQTT_USER" "$NEOLINK_MQTT_PASSWORD" >> /etc/neolink/neolink.toml
               echo "cameras with main stream only: $(grep -c '^stream = "mainStream"$' /etc/neolink/neolink.toml)"
               echo "cameras with Home Assistant controls: $(grep -c '^\[cameras.mqtt.discovery\]$' /etc/neolink/neolink.toml)"
+              # Neolink announces its controls to Home Assistant once, at start. If Mosquitto
+              # isn't up yet they're lost, so wait for it (up to 2 minutes).
+              for i in $(seq 1 60); do
+                nc -z -w 2 mosquitto.home-assistant.svc.cluster.local 1883 && { echo "Mosquitto is up"; exit 0; }
+                sleep 2
+              done
+              echo "Mosquitto isn't answering; starting anyway"
           env:
             - name: NEOLINK_MQTT_USER
               valueFrom:
