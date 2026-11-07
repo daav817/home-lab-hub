@@ -71,6 +71,7 @@ foreach ($camera in $cameras) {
     "password = $(Toml $passwords[$camera.Name])",
     "address = $(Toml $camera.Address)",
     'discovery = "local"',
+    'push_notifications = false',
     'permitted_users = ["frigate"]'
   )
 }
