@@ -22,9 +22,15 @@ def reolink(cam, title, preset_icon, preset_name):
                          arrow("down", "mdi:arrow-down"), arrow("right", "mdi:arrow-right"), preset]}
 
 def blink(cam, title):
-    # Blink is cloud-only: a recent snapshot, refreshed by Home Assistant. Tap for details.
+    # Home Assistant can't show Blink live video, only snapshots. The camera button takes a
+    # new one now; it appears a few seconds later. The cctv icon opens the camera's details.
     return {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "auto",
-            "entities": [{"entity": f"camera.{cam}", "icon": "mdi:cctv"}]}
+            "entities": [
+                {"entity": f"camera.{cam}", "icon": "mdi:camera-iris", "name": "New snapshot",
+                 "tap_action": {"action": "perform-action", "perform_action": "blink.trigger_camera",
+                                "target": {"entity_id": f"camera.{cam}"}}},
+                {"entity": f"camera.{cam}", "icon": "mdi:cctv"},
+            ]}
 
 garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
