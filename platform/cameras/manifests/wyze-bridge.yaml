@@ -45,8 +45,8 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: wyze-bridge
-          # Release 4.5.0 (2026-07-02) from the maintained IDisposable fork.
-          image: idisposablegithub365/wyze-bridge@sha256:708903d2882c76966ecb29763a075372d89773aa6796d0aab70f04369cc6d521
+          # 4.6.1-beta.1 (2026-09-24). 4.5.0 got "discovery timeout" from the Pan v1 cameras.
+          image: idisposablegithub365/wyze-bridge@sha256:a03a9651d398f3ea93717718d32c8587310548ed24502ebe6173b6789cbd6e1b
           envFrom:
             - secretRef:
                 name: wyze-bridge
