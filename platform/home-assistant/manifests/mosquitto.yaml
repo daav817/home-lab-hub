@@ -1,0 +1,178 @@
+# Mosquitto, the MQTT message service. Frigate sends detections through it, and Neolink sends
+# the Reolink pan/tilt and light controls, which Home Assistant picks up automatically.
+# Every client logs in, and each can only use its own topics. Passwords come from the sealed
+# secret mqtt-users, made by scripts/seal-mqtt.py.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto
+  namespace: home-assistant
+data:
+  mosquitto.conf: |
+    listener 1883
+    allow_anonymous false
+    password_file /mosquitto/run/passwd
+    acl_file /mosquitto/config/acl
+    persistence true
+    persistence_location /mosquitto/data/
+    log_dest stdout
+    log_type error
+    log_type warning
+    log_type notice
+  acl: |
+    user homeassistant
+    topic readwrite #
+
+    user frigate
+    topic readwrite frigate/#
+    topic read homeassistant/status
+
+    user neolink
+    topic readwrite neolink/#
+    topic write homeassistant/#
+---
+# Keeps retained messages, such as the device announcements Home Assistant reads, across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-data
+  namespace: home-assistant
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: home-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1883
+        runAsGroup: 1883
+        fsGroup: 1883
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Builds the hashed password file from the sealed passwords, in memory only.
+        - name: passwords
+          image: eclipse-mosquitto:2.0.22
+          command:
+            - sh
+            - -ceu
+            - |
+              umask 077
+              touch /mosquitto/run/passwd
+              mosquitto_passwd -b /mosquitto/run/passwd homeassistant "$HA_PASSWORD"
+              mosquitto_passwd -b /mosquitto/run/passwd frigate "$FRIGATE_PASSWORD"
+              mosquitto_passwd -b /mosquitto/run/passwd neolink "$NEOLINK_PASSWORD"
+          envFrom:
+            - secretRef:
+                name: mqtt-users
+          securityContext: &locked
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: run
+              mountPath: /mosquitto/run
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:2.0.22
+          command: ["mosquitto", "-c", "/mosquitto/config/mosquitto.conf"]
+          ports:
+            - name: mqtt
+              containerPort: 1883
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            periodSeconds: 30
+          securityContext: *locked
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+              readOnly: true
+            - name: run
+              mountPath: /mosquitto/run
+              readOnly: true
+            - name: data
+              mountPath: /mosquitto/data
+      volumes:
+        - name: config
+          configMap:
+            name: mosquitto
+        - name: run
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: data
+          persistentVolumeClaim:
+            claimName: mosquitto-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: home-assistant
+spec:
+  selector:
+    app: mosquitto
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: 1883
+---
+# Only Home Assistant (worker-02's address) and the camera apps may connect.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mosquitto
+  namespace: home-assistant
+spec:
+  podSelector:
+    matchLabels:
+      app: mosquitto
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 192.168.1.102/32
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cameras
+      ports:
+        - port: 1883
+          protocol: TCP

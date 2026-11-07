@@ -67,8 +67,13 @@ data:
     # Without this, Frigate treats the file as a 0.13 config and converts it on first start.
     version: 0.18-0
 
+    # Sends detections to Home Assistant through Mosquitto.
     mqtt:
-      enabled: false
+      enabled: true
+      host: mosquitto.home-assistant.svc.cluster.local
+      port: 1883
+      user: "{FRIGATE_MQTT_USER}"
+      password: "{FRIGATE_MQTT_PASSWORD}"
 
     # Authentik handles logins. It passes the user and their groups, which map to Frigate roles.
     auth:
@@ -217,6 +222,16 @@ spec:
             - secretRef:
                 name: camera-streams
           env:
+            - name: FRIGATE_MQTT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mqtt-clients
+                  key: FRIGATE_MQTT_USER
+            - name: FRIGATE_MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mqtt-clients
+                  key: FRIGATE_MQTT_PASSWORD
             - name: TZ
               value: America/New_York
           ports:

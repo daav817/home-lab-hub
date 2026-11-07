@@ -30,19 +30,45 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
-      # Neolink connects to both the main and sub stream by default. Nothing reads the sub
-      # stream, and its unread data grows Neolink's memory until it's killed. This copies the
-      # sealed config and adds stream = "mainStream" to each camera, without reading passwords.
+      # Copies the sealed camera config into memory and adds, without reading the passwords:
+      # - stream = "mainStream". Nothing reads the sub stream, and pulling it anyway made
+      #   Neolink's memory grow until it was killed.
+      # - Home Assistant controls for each camera: pan/tilt buttons, IR light, status LED,
+      #   motion and reboot. They appear in Home Assistant through MQTT.
+      # - The MQTT login, from the sealed secret mqtt-clients.
       initContainers:
-        - name: main-stream-only
+        - name: prepare-config
           image: busybox:1.36.1
           command:
             - sh
-            - -c
-            - >-
-              awk '{print} /^discovery = "local"$/ {print "stream = \"mainStream\""}'
-              /secret/neolink.toml > /etc/neolink/neolink.toml &&
-              grep -c '^stream = "mainStream"$' /etc/neolink/neolink.toml
+            - -ceu
+            - |
+              awk '
+                {print}
+                /^discovery = "local"$/ {print "stream = \"mainStream\""}
+                /^permitted_users = / {
+                  print "[cameras.mqtt]"
+                  print "enable_preview = false"
+                  print "[cameras.mqtt.discovery]"
+                  print "topic = \"homeassistant\""
+                  print "features = [\"pt\", \"ir\", \"led\", \"motion\", \"reboot\"]"
+                }
+              ' /secret/neolink.toml > /etc/neolink/neolink.toml
+              printf '\n[mqtt]\nbroker_addr = "mosquitto.home-assistant.svc.cluster.local"\nport = 1883\ncredentials = ["%s", "%s"]\n' \
+                "$NEOLINK_MQTT_USER" "$NEOLINK_MQTT_PASSWORD" >> /etc/neolink/neolink.toml
+              echo "cameras with main stream only: $(grep -c '^stream = "mainStream"$' /etc/neolink/neolink.toml)"
+              echo "cameras with Home Assistant controls: $(grep -c '^\[cameras.mqtt.discovery\]$' /etc/neolink/neolink.toml)"
+          env:
+            - name: NEOLINK_MQTT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mqtt-clients
+                  key: NEOLINK_MQTT_USER
+            - name: NEOLINK_MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mqtt-clients
+                  key: NEOLINK_MQTT_PASSWORD
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -60,7 +86,7 @@ spec:
           # Release v0.6.2. The 2025-01-30 build stalled when limited to the main stream.
           image: quantumentangledandy/neolink@sha256:5d67d8b59631281ca8dd079ab3e0ada3d85f491d64a9e2f71533c89883574697
           command: ["/usr/local/bin/neolink"]
-          args: ["rtsp", "--config=/etc/neolink/neolink.toml"]
+          args: ["mqtt-rtsp", "--config=/etc/neolink/neolink.toml"]
           # Neolink saves small settings and a font cache under the home folder.
           env:
             - name: HOME
