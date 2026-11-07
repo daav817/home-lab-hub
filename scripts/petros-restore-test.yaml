@@ -1,0 +1,65 @@
+# Restores the newest Petros export into a throwaway database and counts the rows. It never
+# connects to Supabase. Run it when no export is running, then read the log and remove the pod:
+#   kubectl apply -f scripts/petros-restore-test.yaml
+#   kubectl logs -f petros-restore-test -n default
+#   kubectl delete pod petros-restore-test -n default
+apiVersion: v1
+kind: Pod
+metadata:
+  name: petros-restore-test
+  namespace: default
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+  containers:
+    - name: restore
+      image: postgres:17.11-trixie
+      command:
+        - sh
+        - -ceu
+        - |
+          latest=$(ls -1t /backup/database/*.dump | head -1)
+          echo "Dump: $(basename "$latest"), $(du -h "$latest" | cut -f1)"
+          initdb -D /tmp/pg -U postgres --auth=trust > /dev/null
+          pg_ctl -D /tmp/pg -o "-c listen_addresses='' -k /tmp" -w start > /dev/null
+          createdb -h /tmp -U postgres restored
+          pg_restore -h /tmp -U postgres -d restored --no-owner --no-privileges "$latest" 2> /tmp/restore.log || true
+          echo "Restore messages: $(grep -c . /tmp/restore.log || true)"
+          head -5 /tmp/restore.log | cut -c1-150
+          sql="psql -h /tmp -U postgres -d restored -At"
+          echo "Tables: $($sql -c "select count(*) from information_schema.tables where table_schema='public'")"
+          for table in $($sql -c "select quote_ident(table_name) from information_schema.tables where table_schema='public' order by 1"); do
+            echo "$table: $($sql -c "select count(*) from public.$table")"
+          done
+          echo "Model files: $(find /backup/models -name '*.zip' | wc -l)"
+          echo "RESTORE TEST DONE"
+      env:
+        - name: HOME
+          value: /tmp
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      volumeMounts:
+        - name: backup
+          mountPath: /backup
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+  volumes:
+    - name: backup
+      persistentVolumeClaim:
+        claimName: petros-backups
+        readOnly: true
+    - name: tmp
+      emptyDir: {}
+    - name: run
+      emptyDir: {}
