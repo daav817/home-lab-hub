@@ -27,7 +27,11 @@ metadata:
   name: wyze-bridge
   namespace: cameras
 spec:
-  replicas: 1
+  # Paused 2026-11-07. Both Pan v1 cameras answer the bridge's search on the IOT network and
+  # the replies reach its sockets, but both this bridge (Wyze's own TUTK library) and the
+  # IDisposable fork time out after that. The cause looks to be on the camera or Wyze side.
+  # Set to 1 to try again; the login, storage and firewall rules are still in place.
+  replicas: 0
   strategy:
     type: Recreate
   selector:
