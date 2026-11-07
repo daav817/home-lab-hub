@@ -36,6 +36,7 @@ spec:
       # - Home Assistant controls for each camera: pan/tilt buttons, IR light, status LED,
       #   motion and reboot. They appear in Home Assistant through MQTT.
       # - The MQTT login, from the sealed secret mqtt-clients.
+      # - The stream password, from camera-streams.
       initContainers:
         - name: prepare-config
           image: busybox:1.36.1
@@ -44,6 +45,7 @@ spec:
             - -ceu
             - |
               awk '
+                /^pass = / {print "pass = \"" ENVIRON["FRIGATE_RTSP_PASSWORD"] "\""; next}
                 {print}
                 /^discovery = "local"$/ {print "stream = \"mainStream\""}
                 /^permitted_users = / {
@@ -66,6 +68,13 @@ spec:
               done
               echo "Mosquitto isn't answering; starting anyway"
           env:
+            # The stream password comes from camera-streams, shared with Frigate and the Wyze
+            # bridge, so it can be changed without resealing the camera logins.
+            - name: FRIGATE_RTSP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: camera-streams
+                  key: FRIGATE_RTSP_PASSWORD
             - name: NEOLINK_MQTT_USER
               valueFrom:
                 secretKeyRef:

@@ -85,6 +85,11 @@ spec:
               value: "$(FRIGATE_RTSP_USER):$(FRIGATE_RTSP_PASSWORD)"
             - name: TZ
               value: America/New_York
+          # Web page login and API token. The bridge prints these when it starts, so its log
+          # must never be read without filtering out lines containing [AUTH] or "Auth [".
+          envFrom:
+            - secretRef:
+                name: wyze-bridge-web
           ports:
             - name: rtsp
               containerPort: 8554
