@@ -164,6 +164,10 @@ data:
         basement:
           - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/basement/main
           - "ffmpeg:basement#audio=aac"
+        # Blink Parking Lot (wired), through the Blink bridge. Its live view goes through
+        # Blink's cloud, about 160 kbit/s while live.
+        parking_lot_live:
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/parking_lot
 
     cameras:
       garage:
@@ -178,6 +182,14 @@ data:
         ffmpeg:
           inputs:
             - path: rtsp://127.0.0.1:8554/basement
+              input_args: preset-rtsp-restream
+              roles:
+                - detect
+                - record
+      parking_lot_live:
+        ffmpeg:
+          inputs:
+            - path: rtsp://127.0.0.1:8554/parking_lot_live
               input_args: preset-rtsp-restream
               roles:
                 - detect
