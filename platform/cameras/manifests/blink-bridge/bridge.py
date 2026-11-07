@@ -1,14 +1,22 @@
 """Blink live-view bridge.
 
 Holds one Blink sign-in and serves each camera's live view as an MPEG-TS stream on a local TCP
-port, which go2rtc (in the same pod) turns into RTSP for Frigate and Home Assistant. A live
-session only starts when go2rtc connects, which only happens while something is watching.
+port, which go2rtc (in the same pod) turns into RTSP for Frigate and Home Assistant.
+
+How a live view starts:
+- "Start live view" (an MQTT button in Home Assistant) wakes the camera. The bridge keeps
+  everything Blink sends from the start of the session, so when a player connects it gets the
+  whole stream at once instead of waiting for a battery camera to wake (players give up after
+  about 5 seconds). If no player connects within PREWARM_WAIT seconds, the session ends.
+- A player connecting directly (Frigate, for the wired Parking Lot) also starts a session.
 
 When Blink ends a session:
-- wired cameras reconnect straight away;
-- battery cameras announce "waiting" over MQTT and wait up to CONTINUE_WAIT seconds for a
-  "continue" message (a button in Home Assistant). The viewer's connection is kept open with
-  MPEG-TS null packets meanwhile. Without an answer the view ends, saving battery.
+- wired cameras reconnect straight away while anyone is watching;
+- battery cameras go to "waiting" and wait up to CONTINUE_WAIT seconds for "Continue". Players
+  are kept connected with MPEG-TS null packets meanwhile. Without an answer the view ends.
+
+The bridge also offers each camera's night vision setting, and the light on cameras that have
+one, as Home Assistant controls. Two-way talk isn't supported by the Blink library.
 
 Commands:
     python bridge.py setup    One-time sign-in with your Blink email, password and the
@@ -33,6 +41,8 @@ from blinkpy.blinkpy import Blink
 
 TOKEN_FILE = os.environ.get("BLINK_TOKEN_FILE", "/data/blink.json")
 CONTINUE_WAIT = int(os.environ.get("CONTINUE_WAIT", "60"))
+PREWARM_WAIT = int(os.environ.get("PREWARM_WAIT", "30"))
+BUFFER_LIMIT = 8 * 1024 * 1024
 MQTT_HOST = os.environ.get("MQTT_HOST", "mosquitto.home-assistant.svc.cluster.local")
 MQTT_USER = os.environ.get("MQTT_USER", "blink")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "")
@@ -56,6 +66,11 @@ class Camera:
     port: int
     state: str = "idle"
     continue_event: asyncio.Event = field(default_factory=asyncio.Event)
+    stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    viewers: set = field(default_factory=set)  # one asyncio.Queue per connected player
+    buffer: bytearray = field(default_factory=bytearray)  # stream since the session started
+    attached: bool = False  # a player has connected during this run
+    task: asyncio.Task | None = None
 
 
 def parse_cameras() -> list[Camera]:
@@ -105,52 +120,83 @@ class Bridge:
         self.mqtt: aiomqtt.Client | None = None
         self.saved_token = None
 
+    # --- MQTT and Home Assistant ---------------------------------------------------------
+
     async def publish(self, topic: str, payload: str, retain: bool = True) -> None:
         if self.mqtt:
             with contextlib.suppress(aiomqtt.MqttError):
                 await self.mqtt.publish(topic, payload, retain=retain)
 
     async def set_state(self, camera: Camera, state: str) -> None:
-        camera.state = state
-        log.info("%s: %s", camera.key, state)
+        if camera.state != state:
+            camera.state = state
+            log.info("%s: %s", camera.key, state)
         await self.publish(f"{TOPIC}/{camera.key}/state", state)
 
     async def announce(self) -> None:
-        """Home Assistant discovery: a state sensor for every camera, and a Continue button for
-        battery cameras."""
+        """Home Assistant discovery for each camera's controls."""
         for camera in self.cameras.values():
-            device = {
-                "identifiers": [f"blink_live_{camera.key}"],
-                "name": f"{camera.name} live view",
-                "manufacturer": "Blink",
-                "model": "Live view bridge",
+            base = f"{TOPIC}/{camera.key}"
+            common = {
+                "availability": {"topic": f"{TOPIC}/status"},
+                "device": {
+                    "identifiers": [f"blink_live_{camera.key}"],
+                    "name": f"{camera.name.title()} live view",
+                    "manufacturer": "Blink",
+                    "model": "Live view bridge",
+                },
             }
-            availability = {"topic": f"{TOPIC}/status"}
-            await self.publish(
-                f"{DISCOVERY}/sensor/blink_live_{camera.key}/state/config",
-                json.dumps({
-                    "name": "Live view",
-                    "unique_id": f"blink_live_{camera.key}_state",
-                    "state_topic": f"{TOPIC}/{camera.key}/state",
-                    "icon": "mdi:cctv",
-                    "availability": availability,
-                    "device": device,
-                }),
-            )
-            if not camera.wired:
+
+            async def entity(kind: str, slug: str, config: dict) -> None:
                 await self.publish(
-                    f"{DISCOVERY}/button/blink_live_{camera.key}/continue/config",
-                    json.dumps({
-                        "name": "Continue live view",
-                        "unique_id": f"blink_live_{camera.key}_continue",
-                        "command_topic": f"{TOPIC}/{camera.key}/continue",
-                        "payload_press": "continue",
-                        "icon": "mdi:play-circle",
-                        "availability": availability,
-                        "device": device,
-                    }),
+                    f"{DISCOVERY}/{kind}/blink_live_{camera.key}/{slug}/config",
+                    json.dumps({**config, "unique_id": f"blink_live_{camera.key}_{slug}", **common}),
                 )
-            await self.publish(f"{TOPIC}/{camera.key}/state", camera.state)
+
+            await entity("sensor", "state", {"name": "Live view", "state_topic": f"{base}/state", "icon": "mdi:cctv"})
+            await entity("select", "night_vision", {
+                "name": "Night vision", "command_topic": f"{base}/night_vision/set",
+                "state_topic": f"{base}/night_vision", "options": ["auto", "on", "off"], "icon": "mdi:weather-night",
+            })
+            await entity("switch", "light", {
+                "name": "Light", "command_topic": f"{base}/light/set", "state_topic": f"{base}/light",
+                "payload_on": "on", "payload_off": "off", "optimistic": False, "icon": "mdi:spotlight-beam",
+            })
+            if not camera.wired:
+                await entity("button", "start", {
+                    "name": "Start live view", "command_topic": f"{base}/start", "payload_press": "start",
+                    "icon": "mdi:play",
+                })
+                await entity("button", "stop", {
+                    "name": "Stop live view", "command_topic": f"{base}/stop", "payload_press": "stop",
+                    "icon": "mdi:stop",
+                })
+                await entity("button", "continue", {
+                    "name": "Continue live view", "command_topic": f"{base}/continue", "payload_press": "continue",
+                    "icon": "mdi:play-pause",
+                })
+            await self.publish(f"{base}/state", camera.state)
+
+    async def handle_command(self, camera: Camera, command: str, payload: str) -> None:
+        if command == "start":
+            log.info("%s: start requested", camera.key)
+            self.ensure_running(camera)
+        elif command == "stop":
+            log.info("%s: stop requested", camera.key)
+            camera.stop_event.set()
+        elif command == "continue":
+            log.info("%s: continue requested", camera.key)
+            camera.continue_event.set()
+        elif command == "night_vision/set" and payload in ("auto", "on", "off"):
+            result = await self.blink.cameras[camera.name].async_set_night_vision(payload)
+            log.info("%s: night vision %s (%s)", camera.key, payload, "ok" if result else "refused")
+            if result:
+                await self.publish(f"{TOPIC}/{camera.key}/night_vision", payload)
+        elif command == "light/set" and payload in ("on", "off"):
+            result = await self.blink.cameras[camera.name].async_set_floodlight(payload == "on")
+            log.info("%s: light %s (%s)", camera.key, payload, "ok" if result else "refused")
+            if result is not None:
+                await self.publish(f"{TOPIC}/{camera.key}/light", payload)
 
     async def mqtt_loop(self) -> None:
         will = aiomqtt.Will(f"{TOPIC}/status", "offline", retain=True)
@@ -162,21 +208,29 @@ class Bridge:
                     self.mqtt = client
                     await client.publish(f"{TOPIC}/status", "online", retain=True)
                     await self.announce()
-                    await client.subscribe(f"{TOPIC}/+/continue")
+                    for command in ("start", "stop", "continue", "night_vision/set", "light/set"):
+                        await client.subscribe(f"{TOPIC}/+/{command}")
                     await client.subscribe(f"{DISCOVERY}/status")
                     async for message in client.messages:
                         topic = str(message.topic)
-                        if topic == f"{DISCOVERY}/status" and message.payload == b"online":
-                            await self.announce()  # Home Assistant restarted
+                        payload = message.payload.decode(errors="replace") if message.payload else ""
+                        if topic == f"{DISCOVERY}/status":
+                            if payload == "online":
+                                await self.announce()  # Home Assistant restarted
                             continue
-                        key = topic.split("/")[1]
-                        if key in self.cameras:
-                            log.info("%s: continue requested", key)
-                            self.cameras[key].continue_event.set()
+                        parts = topic.split("/", 2)
+                        camera = self.cameras.get(parts[1])
+                        if camera and self.blink:
+                            try:
+                                await self.handle_command(camera, parts[2], payload)
+                            except Exception:
+                                log.exception("%s: %s failed", camera.key, parts[2])
             except aiomqtt.MqttError as error:
                 log.warning("MQTT connection lost (%s); retrying in 10 seconds", error)
                 self.mqtt = None
                 await asyncio.sleep(10)
+
+    # --- Blink sign-in -------------------------------------------------------------------
 
     async def sign_in(self, session: ClientSession) -> None:
         while not os.path.exists(TOKEN_FILE):
@@ -205,26 +259,50 @@ class Bridge:
                 self.saved_token = self.blink.auth.refresh_token
                 log.info("Saved a refreshed Blink token")
 
-    async def one_session(self, camera: Camera, writer: asyncio.StreamWriter, gone: asyncio.Event) -> int:
-        """Streams one Blink live session to the viewer. Returns the bytes sent."""
+    # --- Live sessions -------------------------------------------------------------------
+
+    def ensure_running(self, camera: Camera) -> None:
+        if camera.task is None or camera.task.done():
+            camera.stop_event.clear()
+            camera.attached = False
+            camera.buffer.clear()
+            camera.task = asyncio.create_task(self.run_camera(camera))
+
+    def send(self, camera: Camera, chunk: bytes) -> None:
+        for queue in list(camera.viewers):
+            queue.put_nowait(chunk)
+
+    async def one_session(self, camera: Camera) -> int:
+        """Streams one Blink session to the viewers, keeping it in the buffer until a player
+        has connected. Returns the bytes received."""
         stream = await self.blink.cameras[camera.name].init_livestream()
         await stream.start("127.0.0.1", 0)
         feed = asyncio.create_task(stream.feed())
-        sent = 0
+        received = 0
+        first_data = None
         try:
             host, port = stream.socket.getsockname()[:2]
             reader, local = await asyncio.open_connection(host, port)
             try:
-                while not gone.is_set():
+                while not camera.stop_event.is_set():
                     try:
-                        chunk = await asyncio.wait_for(reader.read(65536), timeout=20)
+                        chunk = await asyncio.wait_for(reader.read(65536), timeout=5)
                     except TimeoutError:
-                        break
-                    if not chunk:
-                        break
-                    writer.write(chunk)
-                    await writer.drain()
-                    sent += len(chunk)
+                        chunk = None
+                    if chunk == b"":
+                        break  # Blink ended the session
+                    if chunk:
+                        if first_data is None:
+                            first_data = time.monotonic()
+                            await self.set_state(camera, "live")
+                        received += len(chunk)
+                        if not camera.attached and len(camera.buffer) < BUFFER_LIMIT:
+                            camera.buffer.extend(chunk)
+                        self.send(camera, chunk)
+                    # Started from Home Assistant but no player came: give up.
+                    if not camera.attached and time.monotonic() - (first_data or time.monotonic()) > PREWARM_WAIT:
+                        log.info("%s: no player connected within %d s", camera.key, PREWARM_WAIT)
+                        camera.stop_event.set()
             finally:
                 local.close()
         finally:
@@ -232,62 +310,77 @@ class Bridge:
             feed.cancel()
             with contextlib.suppress(BaseException):
                 await feed
-        return sent
+        return received
 
-    async def wait_to_continue(self, camera: Camera, writer: asyncio.StreamWriter, gone: asyncio.Event) -> bool:
+    async def wait_to_continue(self, camera: Camera) -> bool:
         camera.continue_event.clear()
         await self.set_state(camera, "waiting")
         deadline = time.monotonic() + CONTINUE_WAIT
-        while time.monotonic() < deadline and not gone.is_set():
+        while time.monotonic() < deadline and camera.viewers and not camera.stop_event.is_set():
             if camera.continue_event.is_set():
                 return True
-            writer.write(NULL_PACKET * 7)
-            await writer.drain()
+            self.send(camera, NULL_PACKET * 7)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(camera.continue_event.wait(), timeout=1)
-        return camera.continue_event.is_set() and not gone.is_set()
+        return camera.continue_event.is_set() and bool(camera.viewers) and not camera.stop_event.is_set()
 
-    async def serve(self, camera: Camera, client: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        if camera.state != "idle" or self.blink is None:
-            writer.close()  # one viewer connection per camera; go2rtc shares it
-            return
-        gone = asyncio.Event()
-
-        async def watch() -> None:
-            with contextlib.suppress(Exception):
-                while await client.read(1024):
-                    pass
-            gone.set()
-
-        watcher = asyncio.create_task(watch())
+    async def run_camera(self, camera: Camera) -> None:
         backoff = 2
         try:
-            while not gone.is_set():
-                await self.set_state(camera, "live")
+            while not camera.stop_event.is_set():
+                await self.set_state(camera, "starting")
                 started = time.monotonic()
                 try:
-                    sent = await self.one_session(camera, writer, gone)
-                    log.info("%s: session ended after %.0f s, %d KB", camera.key, time.monotonic() - started, sent // 1024)
-                except (ConnectionError, OSError) as error:
-                    if gone.is_set():
-                        break
-                    log.warning("%s: session failed: %s", camera.key, error)
+                    received = await self.one_session(camera)
+                    log.info("%s: session ended after %.0f s, %d KB", camera.key, time.monotonic() - started, received // 1024)
                 except Exception:
                     log.exception("%s: session failed", camera.key)
-                if gone.is_set():
+                if camera.stop_event.is_set() or not camera.viewers:
                     break
                 if camera.wired:
                     # Short sessions in a row mean Blink is refusing; slow down.
                     backoff = 2 if time.monotonic() - started > 60 else min(backoff * 2, 300)
                     await asyncio.sleep(backoff)
-                elif not await self.wait_to_continue(camera, writer, gone):
+                elif not await self.wait_to_continue(camera):
                     break
+        finally:
+            for queue in list(camera.viewers):
+                queue.put_nowait(None)  # tells each player connection to close
+            camera.buffer.clear()
+            await self.set_state(camera, "idle")
+
+    async def serve(self, camera: Camera, client: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """One player connection from go2rtc. Gets the stream so far, then the live data."""
+        if self.blink is None:
+            writer.close()
+            return
+        queue: asyncio.Queue = asyncio.Queue()
+        if camera.buffer:
+            queue.put_nowait(bytes(camera.buffer))
+        camera.viewers.add(queue)
+        camera.attached = True
+        self.ensure_running(camera)
+
+        async def watch() -> None:
+            with contextlib.suppress(Exception):
+                while await client.read(1024):
+                    pass
+            queue.put_nowait(None)
+
+        watcher = asyncio.create_task(watch())
+        try:
+            while (chunk := await queue.get()) is not None:
+                writer.write(chunk)
+                await writer.drain()
         except (ConnectionError, OSError):
-            pass  # viewer left
+            pass
         finally:
             watcher.cancel()
-            writer.close()
-            await self.set_state(camera, "idle")
+            camera.viewers.discard(queue)
+            with contextlib.suppress(Exception):
+                writer.close()
+            if not camera.viewers:
+                camera.stop_event.set()  # last player left
 
     async def run(self) -> None:
         async with ClientSession() as session:
