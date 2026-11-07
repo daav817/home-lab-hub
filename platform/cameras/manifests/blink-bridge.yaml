@@ -89,7 +89,7 @@ spec:
             # stream name = Blink camera name = wired or battery. Order sets the ports
             # (18001 upward), which go2rtc.yaml uses.
             - name: BLINK_CAMERAS
-              value: "front_door=Front Door=battery;front_porch=Front Porch and Swings=battery;parking_lot=Parking Lot=wired"
+              value: "front_door=Front Door=battery;front_porch=front porch and swings=battery;parking_lot=Parking Lot=wired"
             - name: MQTT_PASSWORD
               valueFrom:
                 secretKeyRef:
