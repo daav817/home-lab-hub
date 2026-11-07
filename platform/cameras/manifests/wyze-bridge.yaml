@@ -1,0 +1,117 @@
+# Wyze bridge: turns Wyze cameras into local streams for Frigate. It signs in to Wyze's cloud to
+# find the cameras, then pulls video straight from them over the IOT network, so it runs on
+# worker-02. The Wyze login is the sealed secret wyze-bridge, made by scripts/seal-wyze.ps1.
+# Streams need the same login as the Neolink ones (secret camera-streams). The web page has no
+# login, so nothing outside this namespace can reach the bridge.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wyze-bridge
+  namespace: cameras
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wyze-bridge
+  namespace: cameras
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wyze-bridge
+  template:
+    metadata:
+      labels:
+        app: wyze-bridge
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker-02
+      automountServiceAccountToken: false
+      containers:
+        - name: wyze-bridge
+          # Release 4.5.0 (2026-07-02) from the maintained IDisposable fork.
+          image: idisposablegithub365/wyze-bridge@sha256:708903d2882c76966ecb29763a075372d89773aa6796d0aab70f04369cc6d521
+          envFrom:
+            - secretRef:
+                name: wyze-bridge
+          env:
+            - name: FRIGATE_RTSP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: camera-streams
+                  key: FRIGATE_RTSP_USER
+            - name: FRIGATE_RTSP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: camera-streams
+                  key: FRIGATE_RTSP_PASSWORD
+            - name: STREAM_AUTH
+              value: "$(FRIGATE_RTSP_USER):$(FRIGATE_RTSP_PASSWORD)"
+            - name: STATE_DIR
+              value: /config
+            - name: TZ
+              value: America/New_York
+          ports:
+            - name: rtsp
+              containerPort: 8554
+            - name: web
+              containerPort: 5080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: wyze-bridge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wyze-bridge
+  namespace: cameras
+spec:
+  selector:
+    app: wyze-bridge
+  ports:
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+---
+# Only the camera apps in this namespace (Frigate) may open the streams.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wyze-bridge
+  namespace: cameras
+spec:
+  podSelector:
+    matchLabels:
+      app: wyze-bridge
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8554
+          protocol: TCP
