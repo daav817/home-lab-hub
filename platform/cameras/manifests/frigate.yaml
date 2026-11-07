@@ -64,6 +64,9 @@ data:
   # Copied to /config/config.yml only if there isn't one yet. After that, change settings in
   # Frigate's own Settings pages, which save to that file.
   config.yml: |
+    # Without this, Frigate treats the file as a 0.13 config and converts it on first start.
+    version: 0.18-0
+
     mqtt:
       enabled: false
 
