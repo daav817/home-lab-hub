@@ -14,8 +14,9 @@ if [ "$(id -u)" -ne 0 ]; then echo "Run this with sudo."; exit 1; fi
 if [ "$(hostname)" != "worker-02" ]; then echo "This is meant for worker-02 only."; exit 1; fi
 
 WYZE_CAMERAS="192.168.0.15, 192.168.0.240"
-BRIDGE_TCP_PORTS="1984, 5080, 8554, 8888, 8889"
-BRIDGE_UDP_PORTS="8189"
+# Ports used by either Wyze bridge (the IDisposable fork and the original mrlt8 one).
+BRIDGE_TCP_PORTS="1935, 1984, 5000, 5080, 8554, 8888, 8889, 9997"
+BRIDGE_UDP_PORTS="8000, 8001, 8189"
 
 # Written to a temporary file and checked first, so a mistake never replaces a working file.
 NEW=$(mktemp)
