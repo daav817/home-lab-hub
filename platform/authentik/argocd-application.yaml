@@ -25,6 +25,13 @@ spec:
             configMaps:
               - authentik-blueprints
           global:
+            # The control plane has only 8 GB of memory, so keep Authentik on the workers.
+            affinity:
+              nodeAffinity:
+                type: hard
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
             env:
               - name: AUTHENTIK_POSTGRESQL__HOST
                 value: authentik-postgresql
