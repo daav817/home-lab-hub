@@ -148,20 +148,30 @@ data:
       retain:
         default: 30
 
+    # go2rtc is the only reader of each Neolink stream. It takes video and sound, feeds the
+    # live view (with sound), and re-serves the stream to Frigate's detection and recording.
+    # A reader that ignores the sound makes Neolink's memory grow until it's killed.
+    go2rtc:
+      streams:
+        garage:
+          - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/garage/main
+        basement:
+          - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/basement/main
+
     cameras:
       garage:
         ffmpeg:
           inputs:
-            - path: rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/garage/main
-              input_args: preset-rtsp-generic
+            - path: rtsp://127.0.0.1:8554/garage
+              input_args: preset-rtsp-restream
               roles:
                 - detect
                 - record
       basement:
         ffmpeg:
           inputs:
-            - path: rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@neolink.cameras.svc.cluster.local:8554/basement/main
-              input_args: preset-rtsp-generic
+            - path: rtsp://127.0.0.1:8554/basement
+              input_args: preset-rtsp-restream
               roles:
                 - detect
                 - record
