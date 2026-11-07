@@ -1,0 +1,23 @@
+# Every file in this folder must be listed here, or Argo won't apply it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - intel-gpu-plugin.yaml
+  - neolink.yaml
+  - frigate.yaml
+  - wyze-bridge.yaml
+  - blink-bridge.yaml
+  - camera-streams.sealedsecret.yaml
+  - mqtt-clients.sealedsecret.yaml
+  - neolink-config.sealedsecret.yaml
+  - wyze-bridge.sealedsecret.yaml
+  - wyze-bridge-web.sealedsecret.yaml
+  - blink-mqtt.sealedsecret.yaml
+# The bridge's code and go2rtc settings. A change here gets a new name, which restarts the pod.
+configMapGenerator:
+  - name: blink-bridge-code
+    namespace: cameras
+    files:
+      - blink-bridge/bridge.py
+      - blink-bridge/requirements.txt
+      - blink-bridge/go2rtc.yaml

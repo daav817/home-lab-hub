@@ -30,6 +30,11 @@ data:
     user neolink
     topic readwrite neolink/#
     topic write homeassistant/#
+
+    user blink
+    topic readwrite blink/#
+    topic write homeassistant/#
+    topic read homeassistant/status
 ---
 # Keeps retained messages, such as the device announcements Home Assistant reads, across restarts.
 apiVersion: v1
@@ -90,9 +95,12 @@ spec:
               mosquitto_passwd -b /mosquitto/run/passwd homeassistant "$HA_PASSWORD"
               mosquitto_passwd -b /mosquitto/run/passwd frigate "$FRIGATE_PASSWORD"
               mosquitto_passwd -b /mosquitto/run/passwd neolink "$NEOLINK_PASSWORD"
+              mosquitto_passwd -b /mosquitto/run/passwd blink "$BLINK_PASSWORD"
           envFrom:
             - secretRef:
                 name: mqtt-users
+            - secretRef:
+                name: mqtt-blink
           securityContext: &locked
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

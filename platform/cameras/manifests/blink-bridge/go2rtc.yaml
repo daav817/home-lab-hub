@@ -1,0 +1,15 @@
+# go2rtc next to the Blink bridge. Each stream reads the bridge's local MPEG-TS port, which
+# starts a Blink live session only while someone is watching. The RTSP port has no login, so a
+# network rule limits it to Frigate (this namespace) and Home Assistant.
+log:
+  level: warn
+api:
+  listen: "127.0.0.1:1984"
+rtsp:
+  listen: ":8554"
+webrtc:
+  listen: ""
+streams:
+  front_door: tcp://127.0.0.1:18001
+  front_porch: tcp://127.0.0.1:18002
+  parking_lot: tcp://127.0.0.1:18003

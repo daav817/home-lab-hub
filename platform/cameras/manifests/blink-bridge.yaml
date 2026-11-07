@@ -1,0 +1,181 @@
+# Blink live-view bridge: Blink live video in Home Assistant and Frigate. Its code and settings
+# are in blink-bridge/ (see bridge.py for how sessions start and end). Battery cameras only go
+# live when someone opens their live view; Parking Lot is wired and can stay live.
+#
+# First-time sign-in, once the pod is running:
+#   kubectl exec -it -n cameras deploy/blink-bridge -c bridge -- python /app/bridge.py setup
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: blink-bridge
+  namespace: cameras
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blink-bridge
+  namespace: cameras
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: blink-bridge
+  template:
+    metadata:
+      labels:
+        app: blink-bridge
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Installs the exact packages in requirements.txt, each checked against its hash.
+        - name: packages
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command:
+            - sh
+            - -c
+            - pip install --quiet --no-cache-dir --disable-pip-version-check --require-hashes --target /deps -r /app/requirements.txt
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext: &locked
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: code
+              mountPath: /app
+            - name: deps
+              mountPath: /deps
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: bridge
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command: ["python", "/app/bridge.py", "run"]
+          env:
+            - name: PYTHONPATH
+              value: /deps
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HOME
+              value: /tmp
+            - name: TZ
+              value: America/New_York
+            # stream name = Blink camera name = wired or battery. Order sets the ports
+            # (18001 upward), which go2rtc.yaml uses.
+            - name: BLINK_CAMERAS
+              value: "front_door=Front Door=battery;front_porch=Front Porch and Swings=battery;parking_lot=Parking Lot=wired"
+            - name: MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: blink-mqtt
+                  key: MQTT_PASSWORD
+          securityContext: *locked
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: code
+              mountPath: /app
+            - name: deps
+              mountPath: /deps
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+        - name: go2rtc
+          image: alexxit/go2rtc:1.9.14@sha256:675c318b23c06fd862a61d262240c9a63436b4050d177ffc68a32710d9e05bae
+          args: ["-config", "/config/go2rtc.yaml"]
+          ports:
+            - name: rtsp
+              containerPort: 8554
+          securityContext: *locked
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: go2rtc-config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: code
+          configMap:
+            name: blink-bridge-code
+        - name: go2rtc-config
+          configMap:
+            name: blink-bridge-code
+            items:
+              - key: go2rtc.yaml
+                path: go2rtc.yaml
+        - name: data
+          persistentVolumeClaim:
+            claimName: blink-bridge
+        - name: deps
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blink-bridge
+  namespace: cameras
+spec:
+  selector:
+    app: blink-bridge
+  ports:
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+---
+# The streams have no login, so only Frigate (this namespace) and Home Assistant may open them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blink-bridge
+  namespace: cameras
+spec:
+  podSelector:
+    matchLabels:
+      app: blink-bridge
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - ipBlock:
+            cidr: 192.168.1.102/32
+      ports:
+        - port: 8554
+          protocol: TCP
