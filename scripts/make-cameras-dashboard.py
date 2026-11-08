@@ -76,6 +76,11 @@ garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
 tiles = [garage, basement,
          live_only("parking_lot_live", "Parking Lot", "parking_lot_live_view"),
+         # The small icons on the tile are easy to miss, so the light and night vision also
+         # get a labelled card. Changing the light pauses the live view for a few seconds.
+         {"type": "entities", "title": "Parking Lot controls", "show_header_toggle": False,
+          "entities": [{"entity": "switch.parking_lot_live_view_light", "name": "Light"},
+                       {"entity": "select.parking_lot_live_view_night_vision", "name": "Night vision"}]},
          # The Generic Camera live views were named by Home Assistant after the bridge's address:
          # the first is front_door, the "_2" one is front_porch (see their stream URLs).
          *blink("front_door", "Front Door", live="blink_bridge_cameras_svc_cluster_local"),
