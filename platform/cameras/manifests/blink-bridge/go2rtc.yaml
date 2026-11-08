@@ -9,7 +9,9 @@ rtsp:
   listen: ":8554"
 webrtc:
   listen: ""
+# Blink's audio arrives without a complete description (sample rate 0/0), which players that
+# convert audio fail on ("Invalid data found"). ffmpeg re-encodes the audio and copies the video.
 streams:
-  front_door: tcp://127.0.0.1:18001
-  front_porch: tcp://127.0.0.1:18002
-  parking_lot: tcp://127.0.0.1:18003
+  front_door: ffmpeg:tcp://127.0.0.1:18001#video=copy#audio=aac
+  front_porch: ffmpeg:tcp://127.0.0.1:18002#video=copy#audio=aac
+  parking_lot: ffmpeg:tcp://127.0.0.1:18003#video=copy#audio=aac

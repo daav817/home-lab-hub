@@ -8,7 +8,8 @@ How a live view starts:
   everything Blink sends from the start of the session, so when a player connects it gets the
   whole stream at once instead of waiting for a battery camera to wake (players give up after
   about 5 seconds). If no player connects within PREWARM_WAIT seconds, the session ends.
-- A player connecting directly (Frigate, for the wired Parking Lot) also starts a session.
+- For wired cameras, a player connecting directly (Frigate, for Parking Lot) also starts a
+  session. Battery cameras only start from the button; a player can join a running session.
 
 When Blink ends a session:
 - wired cameras reconnect straight away while anyone is watching;
@@ -42,6 +43,7 @@ from blinkpy.blinkpy import Blink
 TOKEN_FILE = os.environ.get("BLINK_TOKEN_FILE", "/data/blink.json")
 CONTINUE_WAIT = int(os.environ.get("CONTINUE_WAIT", "60"))
 PREWARM_WAIT = int(os.environ.get("PREWARM_WAIT", "30"))
+WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "25"))
 BUFFER_LIMIT = 8 * 1024 * 1024
 MQTT_HOST = os.environ.get("MQTT_HOST", "mosquitto.home-assistant.svc.cluster.local")
 MQTT_USER = os.environ.get("MQTT_USER", "blink")
@@ -280,6 +282,7 @@ class Bridge:
         feed = asyncio.create_task(stream.feed())
         received = 0
         first_data = None
+        opened = time.monotonic()
         try:
             host, port = stream.socket.getsockname()[:2]
             reader, local = await asyncio.open_connection(host, port)
@@ -299,6 +302,9 @@ class Bridge:
                         if not camera.attached and len(camera.buffer) < BUFFER_LIMIT:
                             camera.buffer.extend(chunk)
                         self.send(camera, chunk)
+                    if first_data is None and time.monotonic() - opened > WAKE_TIMEOUT:
+                        log.warning("%s: no video within %d s of asking Blink", camera.key, WAKE_TIMEOUT)
+                        break
                     # Started from Home Assistant but no player came: give up.
                     if not camera.attached and time.monotonic() - (first_data or time.monotonic()) > PREWARM_WAIT:
                         log.info("%s: no player connected within %d s", camera.key, PREWARM_WAIT)
@@ -352,6 +358,11 @@ class Bridge:
     async def serve(self, camera: Camera, client: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """One player connection from go2rtc. Gets the stream so far, then the live data."""
         if self.blink is None:
+            writer.close()
+            return
+        if not camera.wired and (camera.task is None or camera.task.done()):
+            # Battery cameras only start from the Start button. A player reconnecting after a
+            # session ended (go2rtc retries on its own) must not wake the camera again.
             writer.close()
             return
         queue: asyncio.Queue = asyncio.Queue()
