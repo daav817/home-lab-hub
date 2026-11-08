@@ -46,14 +46,12 @@ def blink(cam, title, live):
                      "tap_action": {"action": "perform-action", "perform_action": "blink.trigger_camera",
                                     "target": {"entity_id": f"camera.{cam}"}}},
                     press(f"button.{device}_start_live_view", "mdi:play", "Start live view"),
-                    *controls(device),
                 ]}
     live_card = {"type": "picture-glance", "title": f"{title} (live)", "camera_image": f"camera.{live}",
                  "camera_view": "live",
                  "entities": [
                      press(f"button.{device}_stop_live_view", "mdi:stop", "Stop live view"),
                      press(f"button.{device}_continue_live_view", "mdi:play-pause", "Continue"),
-                     *controls(device),
                  ]}
     return [
         {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": ["live", "waiting"]}],

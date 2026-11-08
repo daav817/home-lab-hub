@@ -16,8 +16,8 @@ When Blink ends a session:
 - battery cameras go to "waiting" and wait up to CONTINUE_WAIT seconds for "Continue". Players
   are kept connected with MPEG-TS null packets meanwhile. Without an answer the view ends.
 
-The bridge also offers each camera's night vision setting, and the light on cameras that have
-one, as Home Assistant controls. Two-way talk isn't supported by the Blink library.
+The bridge also offers the wired camera's light and night vision setting as Home Assistant
+controls (the battery cameras refused both). Two-way talk isn't supported by the Blink library.
 
 Commands:
     python bridge.py setup    One-time sign-in with your Blink email, password and the
@@ -156,14 +156,20 @@ class Bridge:
                 )
 
             await entity("sensor", "state", {"name": "Live view", "state_topic": f"{base}/state", "icon": "mdi:cctv"})
-            await entity("select", "night_vision", {
-                "name": "Night vision", "command_topic": f"{base}/night_vision/set",
-                "state_topic": f"{base}/night_vision", "options": ["auto", "on", "off"], "icon": "mdi:weather-night",
-            })
-            await entity("switch", "light", {
-                "name": "Light", "command_topic": f"{base}/light/set", "state_topic": f"{base}/light",
-                "payload_on": "on", "payload_off": "off", "optimistic": False, "icon": "mdi:spotlight-beam",
-            })
+            # Light and night vision only on the wired camera: the battery cameras refused both.
+            if camera.wired:
+                await entity("select", "night_vision", {
+                    "name": "Night vision", "command_topic": f"{base}/night_vision/set",
+                    "state_topic": f"{base}/night_vision", "options": ["auto", "on", "off"], "icon": "mdi:weather-night",
+                })
+                await entity("switch", "light", {
+                    "name": "Light", "command_topic": f"{base}/light/set", "state_topic": f"{base}/light",
+                    "payload_on": "on", "payload_off": "off", "optimistic": False, "icon": "mdi:spotlight-beam",
+                })
+            else:
+                for kind, slug in (("select", "night_vision"), ("switch", "light")):
+                    # An empty config tells Home Assistant to remove the entity.
+                    await self.publish(f"{DISCOVERY}/{kind}/blink_live_{camera.key}/{slug}/config", "")
             if not camera.wired:
                 await entity("button", "start", {
                     "name": "Start live view", "command_topic": f"{base}/start", "payload_press": "start",
@@ -319,21 +325,26 @@ class Bridge:
         return received
 
     async def wait_to_continue(self, camera: Camera) -> bool:
-        camera.continue_event.clear()
+        """Waits the full window for Continue, even if the player disconnects meanwhile (the live
+        tile reconnects when the next session starts). Continue pressed during the session
+        counts too, so the next session starts straight away."""
+        if camera.continue_event.is_set():
+            return True
         await self.set_state(camera, "waiting")
         deadline = time.monotonic() + CONTINUE_WAIT
-        while time.monotonic() < deadline and camera.viewers and not camera.stop_event.is_set():
+        while time.monotonic() < deadline and not camera.stop_event.is_set():
             if camera.continue_event.is_set():
                 return True
             self.send(camera, NULL_PACKET * 7)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(camera.continue_event.wait(), timeout=1)
-        return camera.continue_event.is_set() and bool(camera.viewers) and not camera.stop_event.is_set()
+        return camera.continue_event.is_set() and not camera.stop_event.is_set()
 
     async def run_camera(self, camera: Camera) -> None:
         backoff = 2
         try:
             while not camera.stop_event.is_set():
+                camera.continue_event.clear()  # a press during this session continues it
                 await self.set_state(camera, "starting")
                 started = time.monotonic()
                 try:
@@ -341,9 +352,11 @@ class Bridge:
                     log.info("%s: session ended after %.0f s, %d KB", camera.key, time.monotonic() - started, received // 1024)
                 except Exception:
                     log.exception("%s: session failed", camera.key)
-                if camera.stop_event.is_set() or not camera.viewers:
+                if camera.stop_event.is_set():
                     break
                 if camera.wired:
+                    if not camera.viewers:
+                        break
                     # Short sessions in a row mean Blink is refusing; slow down.
                     backoff = 2 if time.monotonic() - started > 60 else min(backoff * 2, 300)
                     await asyncio.sleep(backoff)
@@ -391,7 +404,7 @@ class Bridge:
             camera.viewers.discard(queue)
             with contextlib.suppress(Exception):
                 writer.close()
-            if not camera.viewers:
+            if not camera.viewers and camera.state != "waiting":
                 camera.stop_event.set()  # last player left
 
     async def run(self) -> None:
