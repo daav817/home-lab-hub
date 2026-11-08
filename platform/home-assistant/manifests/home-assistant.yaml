@@ -51,6 +51,26 @@ data:
                 {{ trigger.topic.split('/')[1] | replace('_', ' ') | title }}: Blink ended the
                 live session. Press Continue on the Cameras dashboard within 60 seconds to keep
                 watching.
+      # When Blink sees motion on a battery camera, wake it so Frigate records and detects.
+      # The camera takes about 5 seconds to wake, and Blink's motion sensors are only checked
+      # every so often, so the start of each event is missed.
+      - id: blink_motion_record
+        alias: Blink motion, record in Frigate
+        mode: parallel
+        triggers:
+          - trigger: state
+            entity_id: binary_sensor.front_door_motion
+            to: "on"
+            id: front_door
+          - trigger: state
+            entity_id: binary_sensor.front_porch_and_swings_motion
+            to: "on"
+            id: front_porch
+        actions:
+          - action: mqtt.publish
+            data:
+              topic: "blink/{{ trigger.id }}/start"
+              payload: motion
       - id: blink_live_clear
         alias: Blink live view, clear the prompt
         mode: parallel

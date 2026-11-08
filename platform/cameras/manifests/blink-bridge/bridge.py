@@ -74,6 +74,7 @@ class Camera:
     buffer: bytearray = field(default_factory=bytearray)  # stream since the session started
     attached: bool = False  # a player has connected during this run
     task: asyncio.Task | None = None
+    from_motion: bool = False  # started by a Blink motion event: no Continue prompt
 
 
 def parse_cameras() -> list[Camera]:
@@ -188,7 +189,13 @@ class Bridge:
 
     async def handle_command(self, camera: Camera, command: str, payload: str) -> None:
         if command == "start":
-            log.info("%s: start requested", camera.key)
+            # "motion" comes from Home Assistant when Blink sees motion, so Frigate can record.
+            from_motion = payload == "motion"
+            log.info("%s: start requested%s", camera.key, " (motion)" if from_motion else "")
+            if camera.task is None or camera.task.done():
+                camera.from_motion = from_motion
+            elif not from_motion:
+                camera.from_motion = False  # someone is watching: offer Continue as usual
             self.ensure_running(camera)
         elif command == "stop":
             log.info("%s: stop requested", camera.key)
@@ -377,7 +384,7 @@ class Bridge:
                     # Short sessions in a row mean Blink is refusing; slow down.
                     backoff = 2 if time.monotonic() - started > 60 else min(backoff * 2, 300)
                     await asyncio.sleep(backoff)
-                elif not await self.wait_to_continue(camera):
+                elif camera.from_motion or not await self.wait_to_continue(camera):
                     break
         finally:
             for queue in list(camera.viewers):

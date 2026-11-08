@@ -168,6 +168,12 @@ data:
         # Blink's cloud, about 160 kbit/s while live.
         parking_lot_live:
           - rtsp://blink-bridge.cameras.svc.cluster.local:8554/parking_lot
+        # Blink battery cameras. The bridge refuses these unless a live session is running
+        # (Start in Home Assistant, or Blink motion), so Frigate never wakes them itself.
+        front_door_live:
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_door
+        front_porch_live:
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_porch
 
     cameras:
       garage:
@@ -190,6 +196,22 @@ data:
         ffmpeg:
           inputs:
             - path: rtsp://127.0.0.1:8554/parking_lot_live
+              input_args: preset-rtsp-restream
+              roles:
+                - detect
+                - record
+      front_door_live:
+        ffmpeg:
+          inputs:
+            - path: rtsp://127.0.0.1:8554/front_door_live
+              input_args: preset-rtsp-restream
+              roles:
+                - detect
+                - record
+      front_porch_live:
+        ffmpeg:
+          inputs:
+            - path: rtsp://127.0.0.1:8554/front_porch_live
               input_args: preset-rtsp-restream
               roles:
                 - detect
