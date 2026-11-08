@@ -35,8 +35,9 @@ def controls(device):
 
 def blink(cam, title, live):
     """Battery Blink camera. Shows Blink's latest snapshot, so opening the dashboard never wakes
-    the camera. Tapping the picture (or Start) wakes it; about 5 seconds later, once Blink is
-    sending video, the tile switches to live video. Tapping the live picture opens it large.
+    the camera. Tapping the picture (or Start) wakes it; once Blink is sending video, the tile
+    switches to Frigate's live view of it (Frigate joins the session within about 10 seconds
+    and records it). Tapping the live picture opens it large.
     Between sessions the tile shows the snapshot again with Continue: Blink ends each session
     after a minute or two, and the bridge waits 2 minutes for Continue (a notification asks)."""
     device = f"{cam}_live_view"
@@ -81,10 +82,9 @@ tiles = [garage, basement,
          {"type": "button", "entity": "switch.parking_lot_live_view_light", "name": "Parking Lot light",
           "icon": "mdi:spotlight-beam", "show_state": True, "icon_height": "80px",
           "tap_action": {"action": "toggle"}},
-         # The Generic Camera live views were named by Home Assistant after the bridge's address:
-         # the first is front_door, the "_2" one is front_porch (see their stream URLs).
-         *blink("front_door", "Front Door", live="blink_bridge_cameras_svc_cluster_local"),
-         *blink("front_porch_and_swings", "Front Porch", live="blink_bridge_cameras_svc_cluster_local_2")]
+         # Live video comes through Frigate (camera.<name>_live), the same route as the Reolinks.
+         *blink("front_door", "Front Door", live="front_door_live"),
+         *blink("front_porch_and_swings", "Front Porch", live="front_porch_live")]
 
 config = {"views": [
     {"title": "All cameras", "path": "all", "type": "panel",
