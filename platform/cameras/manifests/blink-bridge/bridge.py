@@ -69,6 +69,7 @@ class Camera:
     state: str = "idle"
     continue_event: asyncio.Event = field(default_factory=asyncio.Event)
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    pause_event: asyncio.Event = field(default_factory=asyncio.Event)  # ends this session only
     viewers: set = field(default_factory=set)  # one asyncio.Queue per connected player
     buffer: bytearray = field(default_factory=bytearray)  # stream since the session started
     attached: bool = False  # a player has connected during this run
@@ -201,10 +202,26 @@ class Bridge:
             if result:
                 await self.publish(f"{TOPIC}/{camera.key}/night_vision", payload)
         elif command == "light/set" and payload in ("on", "off"):
-            result = await self.blink.cameras[camera.name].async_set_floodlight(payload == "on")
-            log.info("%s: light %s (%s)", camera.key, payload, "ok" if result else "refused")
-            if result is not None:
-                await self.publish(f"{TOPIC}/{camera.key}/light", payload)
+            await self.set_light(camera, payload)
+
+    async def set_light(self, camera: Camera, payload: str) -> None:
+        """Blink refuses light changes while the camera is streaming ("busy"), so pause the
+        live session for a moment. A wired camera's session resumes on its own."""
+        blink_camera = self.blink.cameras[camera.name]
+        paused = camera.task is not None and not camera.task.done()
+        if paused:
+            camera.pause_event.set()
+        try:
+            for attempt in range(8):
+                await asyncio.sleep(3 if paused or attempt else 0)
+                result = await blink_camera.async_set_floodlight(payload == "on")
+                if result is not None:
+                    log.info("%s: light %s", camera.key, payload)
+                    await self.publish(f"{TOPIC}/{camera.key}/light", payload)
+                    return
+            log.warning("%s: Blink kept refusing to turn the light %s", camera.key, payload)
+        finally:
+            camera.pause_event.clear()
 
     async def mqtt_loop(self) -> None:
         will = aiomqtt.Will(f"{TOPIC}/status", "offline", retain=True)
@@ -293,7 +310,7 @@ class Bridge:
             host, port = stream.socket.getsockname()[:2]
             reader, local = await asyncio.open_connection(host, port)
             try:
-                while not camera.stop_event.is_set():
+                while not camera.stop_event.is_set() and not camera.pause_event.is_set():
                     try:
                         chunk = await asyncio.wait_for(reader.read(65536), timeout=5)
                     except TimeoutError:
