@@ -35,28 +35,33 @@ def controls(device):
 
 def blink(cam, title, live):
     """Battery Blink camera. Shows Blink's latest snapshot, so opening the dashboard never wakes
-    the camera. Start wakes it; once Blink is sending video the tile switches to live video
-    (the Generic Camera `live`) with Stop and Continue. Continue keeps watching when Blink ends
-    a session (a notification asks)."""
+    the camera. Tapping the picture (or Start) wakes it; about 5 seconds later, once Blink is
+    sending video, the tile switches to live video. Tapping the live picture opens it large.
+    Between sessions the tile shows the snapshot again with Continue: Blink ends each session
+    after a minute or two, and the bridge waits 2 minutes for Continue (a notification asks)."""
     device = f"{cam}_live_view"
     state = f"sensor.{device}_live_view"
+    start = {"action": "perform-action", "perform_action": "button.press",
+             "target": {"entity_id": f"button.{device}_start_live_view"}}
     snapshot = {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "auto",
+                "tap_action": start,
                 "entities": [
                     {"entity": f"camera.{cam}", "icon": "mdi:camera-iris", "name": "New snapshot",
                      "tap_action": {"action": "perform-action", "perform_action": "blink.trigger_camera",
                                     "target": {"entity_id": f"camera.{cam}"}}},
                     press(f"button.{device}_start_live_view", "mdi:play", "Start live view"),
+                    press(f"button.{device}_continue_live_view", "mdi:play-pause", "Continue"),
                 ]}
     live_card = {"type": "picture-glance", "title": f"{title} (live)", "camera_image": f"camera.{live}",
-                 "camera_view": "live",
+                 "camera_view": "live", "entity": f"camera.{live}", "tap_action": {"action": "more-info"},
                  "entities": [
                      press(f"button.{device}_stop_live_view", "mdi:stop", "Stop live view"),
                      press(f"button.{device}_continue_live_view", "mdi:play-pause", "Continue"),
                  ]}
     return [
-        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": ["live", "waiting"]}],
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": "live"}],
          "card": snapshot},
-        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": ["live", "waiting"]}],
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": "live"}],
          "card": live_card},
     ]
 
