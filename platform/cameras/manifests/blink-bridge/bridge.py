@@ -365,12 +365,13 @@ class Bridge:
             # session ended (go2rtc retries on its own) must not wake the camera again.
             writer.close()
             return
+        # Start the session first: starting one resets the buffer and the attached flag.
+        self.ensure_running(camera)
         queue: asyncio.Queue = asyncio.Queue()
         if camera.buffer:
             queue.put_nowait(bytes(camera.buffer))
         camera.viewers.add(queue)
         camera.attached = True
-        self.ensure_running(camera)
 
         async def watch() -> None:
             with contextlib.suppress(Exception):
