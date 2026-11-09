@@ -96,6 +96,10 @@ def live_only(cam, title, device):
                 {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen",
                  "tap_action": {"action": "more-info", "entity": f"camera.{cam}"},
                  "style": {**ROUND, "top": "4%", "right": "4%"}},
+                # Chime in this browser when Frigate sees a person or car (Browser Mod; tap to switch)
+                {"type": "state-icon", "entity": "input_boolean.parking_lot_alert_sound",
+                 "title": "Alert sound in the browser", "tap_action": {"action": "toggle"},
+                 "style": {**ROUND, "bottom": "4%", "right": "42%"}},
                 {"type": "state-icon", "entity": f"select.{device}_night_vision", "title": "Night vision",
                  "tap_action": {"action": "more-info"},
                  "style": {**ROUND, "bottom": "4%", "right": "25%"}},
