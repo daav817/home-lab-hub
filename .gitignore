@@ -45,3 +45,7 @@ sealed-secrets-key*
 
 # local tools
 /.tools/
+
+# Python bytecode (from local compile checks)
+__pycache__/
+*.pyc
