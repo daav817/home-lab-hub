@@ -4,12 +4,15 @@ import sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 src = Path(sys.argv[1]).resolve(); out = Path(sys.argv[2]).resolve()
+# Footer title: optional third argument, else the page's <title>.
+footer_title = sys.argv[3] if len(sys.argv) > 3 else None
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page()
     pg.goto(src.as_uri()); pg.wait_for_load_state("networkidle")
+    title = footer_title or pg.title()
     pg.pdf(path=str(out), format="Letter", print_background=True, prefer_css_page_size=True,
            display_header_footer=True, header_template="<span></span>",
-           footer_template='<div style="font-size:8px;color:#888;width:100%;text-align:center;font-family:Segoe UI,Arial">Home Lab Hub — How It Works · page <span class="pageNumber"></span> of <span class="totalPages"></span></div>')
+           footer_template=f'<div style="font-size:8px;color:#888;width:100%;text-align:center;font-family:Segoe UI,Arial">{title} · page <span class="pageNumber"></span> of <span class="totalPages"></span></div>')
     b.close()
 print(out, out.stat().st_size)

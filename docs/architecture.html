@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home Lab Hub — Architecture & Engineering Guide</title>
+<style>
+  @page { size: Letter; margin: 0.65in 0.7in 0.75in 0.7in; }
+  :root { --ink:#141a26; --muted:#5b6475; --line:#d7dce6; --soft:#f3f5f9; --code:#f6f8fa;
+          --blue:#2563eb; --teal:#0f8b8d; --amber:#b45309; --violet:#6d28d9; --green:#15803d; --red:#b91c1c; --slate:#334155; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Inter, Arial, sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 27pt; line-height: 1.1; margin: 0 0 8pt; letter-spacing: -0.4pt; }
+  h2 { font-size: 15.5pt; margin: 0 0 6pt; padding-bottom: 3pt; border-bottom: 2px solid var(--ink); break-after: avoid; }
+  h2 small { font-size: 9pt; color: var(--muted); font-weight: 500; margin-left: 6pt; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 4pt; break-after: avoid; color: var(--slate); }
+  h4 { font-size: 10pt; margin: 8pt 0 3pt; break-after: avoid; }
+  p { margin: 0 0 6pt; }
+  ul, ol { margin: 0 0 7pt; padding-left: 16pt; }
+  li { margin-bottom: 2pt; }
+  code, .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.6pt; background: var(--code); padding: 0 3pt; border-radius: 3pt; }
+  pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.2pt; background: var(--code); border: 1px solid var(--line); border-radius: 6pt; padding: 7pt 9pt; white-space: pre-wrap; margin: 4pt 0 8pt; break-inside: avoid; }
+  .section { break-before: page; }
+  .cover { height: 9.4in; display: flex; flex-direction: column; justify-content: space-between; }
+  .band { background: var(--ink); color: #fff; padding: 30pt 28pt; border-radius: 10pt; }
+  .band p { color: #c3cde0; font-size: 12pt; margin: 0; }
+  .kicker { text-transform: uppercase; letter-spacing: 2pt; font-size: 8.5pt; color: #93a4c6; margin-bottom: 10pt; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18pt; font-size: 9pt; margin-top: 14pt; }
+  .meta div { padding: 3pt 0; border-bottom: 1px dotted var(--line); }
+  .meta b { display: inline-block; width: 92pt; color: var(--muted); font-weight: 600; }
+  .toc { columns: 2; column-gap: 22pt; list-style: none; padding: 0; font-size: 9.6pt; }
+  .toc li { padding: 2.5pt 0; border-bottom: 1px dotted var(--line); break-inside: avoid; margin: 0; }
+  .toc b { color: var(--blue); display: inline-block; width: 18pt; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 9pt; font-size: 8.6pt; }
+  th { text-align: left; background: var(--ink); color: #fff; padding: 4pt 6pt; font-weight: 600; }
+  td { padding: 4pt 6pt; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  tr:nth-child(even) td { background: #fafbfd; }
+  .note { background: var(--soft); border-left: 4px solid var(--blue); padding: 6pt 10pt; margin: 6pt 0 9pt; border-radius: 0 6pt 6pt 0; break-inside: avoid; }
+  .note.warn { border-color: var(--amber); } .note.risk { border-color: var(--red); } .note.ok { border-color: var(--green); }
+  .note b:first-child { display: block; margin-bottom: 1pt; }
+  figure { margin: 6pt 0 10pt; break-inside: avoid; }
+  figcaption { font-size: 8.4pt; color: var(--muted); margin-top: 3pt; text-align: center; }
+  svg text { font-family: "Segoe UI", Arial, sans-serif; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+  .card { border: 1px solid var(--line); border-radius: 7pt; padding: 7pt 9pt; break-inside: avoid; }
+  .card h4 { margin-top: 0; }
+  .tag { display: inline-block; font-size: 7.6pt; font-weight: 700; color: #fff; padding: 0 6pt; border-radius: 8pt; vertical-align: 1pt; }
+  .sev-h { background: var(--red); } .sev-m { background: var(--amber); } .sev-l { background: var(--slate); }
+  .st-done { background: var(--green); } .st-part { background: var(--amber); } .st-plan { background: var(--blue); }
+  .small { font-size: 8.4pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div>
+    <div class="band">
+      <div class="kicker">Energia Power · Platform Engineering</div>
+      <h1>Home Lab Hub<br>Architecture &amp; Engineering Guide</h1>
+      <p>A reference for software, QA, DevOps and release engineers: how the platform is built, deployed, secured, observed and recovered, and where it goes next.</p>
+    </div>
+    <div class="meta">
+      <div><b>Document date</b>November 9, 2026</div>
+      <div><b>Repository</b><span class="mono">daav817/home-lab-hub</span></div>
+      <div><b>Hub version</b>0.1.0.18</div>
+      <div><b>Cluster</b>k3s v1.34.6+k3s1, 3 nodes</div>
+      <div><b>Audience</b>Engineers maintaining or extending the platform</div>
+      <div><b>Classification</b>Internal: contains topology, no secrets</div>
+    </div>
+    <h3 style="margin-top:18pt">Contents</h3>
+    <ol class="toc">
+      <li><b>1</b>System context and design principles</li>
+      <li><b>2</b>Physical and network topology</li>
+      <li><b>3</b>Cluster platform layer</li>
+      <li><b>4</b>Edge, ingress and request routing</li>
+      <li><b>5</b>Identity and access management</li>
+      <li><b>6</b>The hub application</li>
+      <li><b>7</b>CI/CD and release engineering</li>
+      <li><b>8</b>GitOps and configuration management</li>
+      <li><b>9</b>Data persistence, backup and recovery</li>
+      <li><b>10</b>Observability and alerting</li>
+      <li><b>11</b>Camera and IoT subsystem</li>
+      <li><b>12</b>Security model</li>
+      <li><b>13</b>Operations runbook</li>
+      <li><b>14</b>Known gaps and technical debt</li>
+      <li><b>15</b>Roadmap: remaining phases in detail</li>
+      <li><b>16</b>Platform evolution beyond the phases</li>
+      <li><b>A</b>Version inventory</li>
+      <li><b>B</b>Namespaces, workloads and ports</li>
+    </ol>
+  </div>
+  <p class="small">Every version, setting and count in this document was read from the running cluster or the repositories on the document date. Secrets, tokens and credentials are omitted. Re-render after significant changes (<span class="mono">python docs/render-pdf.py docs/architecture.html out.pdf</span>).</p>
+</div>
+
+<!-- 1 CONTEXT -->
+<div class="section">
+  <h2>1. System context and design principles</h2>
+  <p>Home Lab Hub is a self-hosted application platform: a three-node Kubernetes cluster on commodity mini PCs that runs a family business's line-of-business apps, home automation and video surveillance, behind a single portal (<span class="mono">hub.energiapower.llc</span>) with centralized identity. The "hub" is both the <b>portal application</b> (Next.js) and, by extension, the <b>platform</b> it fronts.</p>
+  <figure>
+    <svg viewBox="0 0 720 330" width="100%" role="img" aria-label="System context">
+      <defs><marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="9.5">
+        <rect x="8" y="16" width="120" height="50" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="68" y="37" text-anchor="middle" font-weight="700">Admin</text><text x="68" y="52" text-anchor="middle">browser / phone</text>
+        <rect x="8" y="80" width="120" height="50" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="68" y="101" text-anchor="middle" font-weight="700">Family users</text><text x="68" y="116" text-anchor="middle">hub-family / hub-limited</text>
+        <rect x="8" y="144" width="120" height="50" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="68" y="165" text-anchor="middle" font-weight="700">Public visitors</text><text x="68" y="180" text-anchor="middle">www (marketing site)</text>
+        <rect x="160" y="70" width="112" height="76" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="216" y="93" text-anchor="middle" font-weight="700">Cloudflare edge</text><text x="216" y="108" text-anchor="middle">DNS, TLS termination</text><text x="216" y="121" text-anchor="middle">WAF, Zero Trust tunnel</text><text x="216" y="134" text-anchor="middle">Always-HTTPS</text>
+        <rect x="300" y="10" width="300" height="250" rx="10" fill="#f8fafc" stroke="#64748b" stroke-dasharray="5 4"/>
+        <text x="312" y="27" font-weight="700" fill="#475569">k3s cluster (on premises)</text>
+        <rect x="314" y="40" width="130" height="40" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="379" y="57" text-anchor="middle" font-weight="700">cloudflared</text><text x="379" y="71" text-anchor="middle">outbound tunnel</text>
+        <rect x="314" y="92" width="130" height="40" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="379" y="109" text-anchor="middle" font-weight="700">Traefik v3.7</text><text x="379" y="123" text-anchor="middle">ingress + ForwardAuth</text>
+        <rect x="460" y="40" width="128" height="40" rx="6" fill="#f5f3ff" stroke="#6d28d9"/><text x="524" y="57" text-anchor="middle" font-weight="700">Authentik</text><text x="524" y="71" text-anchor="middle">OIDC IdP + proxy outpost</text>
+        <rect x="460" y="92" width="128" height="40" rx="6" fill="#f0fdf4" stroke="#15803d"/><text x="524" y="109" text-anchor="middle" font-weight="700">Hub portal</text><text x="524" y="123" text-anchor="middle">Next.js + Postgres</text>
+        <rect x="314" y="144" width="274" height="50" rx="6" fill="#f0fdf4" stroke="#15803d"/><text x="451" y="161" text-anchor="middle" font-weight="700">Business apps</text><text x="451" y="176" text-anchor="middle">CRM (Energia) · Investco · Petros AI · PDF Edit · Godseye · website</text><text x="451" y="188" text-anchor="middle" fill="#5b6475">each its own repo, image and Argo CD Application</text>
+        <rect x="314" y="204" width="132" height="46" rx="6" fill="#fef2f2" stroke="#b91c1c"/><text x="380" y="222" text-anchor="middle" font-weight="700">Platform services</text><text x="380" y="237" text-anchor="middle">Argo CD · Longhorn · obs.</text>
+        <rect x="456" y="204" width="132" height="46" rx="6" fill="#fdf4ff" stroke="#a21caf"/><text x="522" y="222" text-anchor="middle" font-weight="700">Home &amp; cameras</text><text x="522" y="237" text-anchor="middle">Home Assistant · Frigate</text>
+        <rect x="620" y="16" width="94" height="44" rx="6" fill="#f8fafc" stroke="#334155"/><text x="667" y="35" text-anchor="middle" font-weight="700">GitHub</text><text x="667" y="49" text-anchor="middle">repos, Actions, GHCR</text>
+        <rect x="620" y="72" width="94" height="44" rx="6" fill="#f8fafc" stroke="#334155"/><text x="667" y="91" text-anchor="middle" font-weight="700">Resend / Gmail</text><text x="667" y="105" text-anchor="middle">mail out, alerts</text>
+        <rect x="620" y="128" width="94" height="58" rx="6" fill="#f8fafc" stroke="#334155"/><text x="667" y="147" text-anchor="middle" font-weight="700">SaaS deps</text><text x="667" y="161" text-anchor="middle">Supabase, GCS</text><text x="667" y="174" text-anchor="middle">Blink cloud, APIs</text>
+        <rect x="300" y="276" width="300" height="46" rx="6" fill="#f8fafc" stroke="#334155"/><text x="450" y="295" text-anchor="middle" font-weight="700">Synology RT2600ac (SRM 1.3)</text><text x="450" y="310" text-anchor="middle">routing, VLANs, CIFS backup target (2 × 4 TB)</text>
+        <line x1="128" y1="41" x2="158" y2="92" stroke="#334155" marker-end="url(#m1)"/><line x1="128" y1="105" x2="158" y2="106" stroke="#334155" marker-end="url(#m1)"/><line x1="128" y1="169" x2="158" y2="122" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="272" y1="100" x2="312" y2="62" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="379" y1="80" x2="379" y2="90" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="444" y1="105" x2="458" y2="65" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="444" y1="118" x2="458" y2="113" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="600" y1="60" x2="618" y2="40" stroke="#334155" marker-end="url(#m1)"/>
+        <line x1="450" y1="260" x2="450" y2="274" stroke="#334155" marker-end="url(#m1)"/>
+      </g>
+    </svg>
+    <figcaption>Figure 1. System context. No inbound ports are open on the router: all public traffic arrives over the outbound Cloudflare tunnel.</figcaption>
+  </figure>
+  <h3>Design principles (and the decisions they drove)</h3>
+  <table>
+    <tr><th style="width:26%">Principle</th><th>Concrete decision</th></tr>
+    <tr><td><b>Zero inbound exposure</b></td><td>Cloudflare Tunnel (outbound-only) instead of port forwarding. UPnP removed from the router. Admin-only tools without a public route (Argo CD) are LAN-only.</td></tr>
+    <tr><td><b>Git is the source of truth</b></td><td>Every workload is an Argo CD Application with <code>selfHeal: true</code>. Secrets are committed as SealedSecrets. Image versions are pinned in git (with one exception, §7).</td></tr>
+    <tr><td><b>Centralized identity, minimal double login</b></td><td>Authentik is the IdP. Apps with mature auth keep their own login (no ForwardAuth layered on top), while tools without auth (Prometheus, Alertmanager, Frigate, Longhorn) sit behind Authentik ForwardAuth.</td></tr>
+    <tr><td><b>Least privilege for the internet-facing portal</b></td><td>The hub can <i>read</i> backup state and <i>create</i> snapshots and backups, but cannot delete or restore. Destructive storage operations stay in Longhorn behind a step-up 2FA flow.</td></tr>
+    <tr><td><b>Recoverability is tested, not assumed</b></td><td>Nightly Longhorn backups to separate hardware, plus scripted restore tests that compare restored data against live data.</td></tr>
+    <tr><td><b>Supply-chain hygiene</b></td><td>Actions pinned by commit SHA; images pinned by tag or digest; third-party HA integrations installed by pinned version and SHA-256; Trivy, Gitleaks and Semgrep in CI.</td></tr>
+    <tr><td><b>Commodity hardware, graceful degradation</b></td><td>Three nodes with Longhorn 3-replica volumes for important data; cheaper single-replica class (<code>longhorn-single</code>) for bulk, re-creatable data such as camera media.</td></tr>
+  </table>
+</div>
+
+<!-- 2 TOPOLOGY -->
+<div class="section">
+  <h2>2. Physical and network topology</h2>
+  <figure>
+    <svg viewBox="0 0 720 300" width="100%" role="img" aria-label="Network topology">
+      <g font-size="9.5">
+        <rect x="290" y="8" width="140" height="34" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="360" y="29" text-anchor="middle" font-weight="700">ISP / Internet</text>
+        <rect x="250" y="62" width="220" height="50" rx="6" fill="#f8fafc" stroke="#334155"/><text x="360" y="82" text-anchor="middle" font-weight="700">Synology RT2600ac</text><text x="360" y="98" text-anchor="middle">NAT, DHCP .2–.239, isolation between LANs</text>
+        <line x1="360" y1="42" x2="360" y2="62" stroke="#334155"/>
+        <rect x="10" y="140" width="400" height="150" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+        <text x="20" y="158" font-weight="700" fill="#1e3a8a">Primary LAN 192.168.1.0/24 (untagged)</text>
+        <rect x="22" y="170" width="118" height="54" rx="5" fill="#fff" stroke="#2563eb"/><text x="81" y="188" text-anchor="middle" font-weight="700">openclaw .100</text><text x="81" y="202" text-anchor="middle">control plane</text><text x="81" y="215" text-anchor="middle">i5-6260U · 8 GB</text>
+        <rect x="150" y="170" width="118" height="54" rx="5" fill="#fff" stroke="#2563eb"/><text x="209" y="188" text-anchor="middle" font-weight="700">worker-01 .101</text><text x="209" y="202" text-anchor="middle">agent</text><text x="209" y="215" text-anchor="middle">i7-7700T · 16 GB · HD630</text>
+        <rect x="278" y="170" width="122" height="54" rx="5" fill="#fff" stroke="#2563eb"/><text x="339" y="188" text-anchor="middle" font-weight="700">worker-02 .102</text><text x="339" y="202" text-anchor="middle">agent · iGPU (Frigate)</text><text x="339" y="215" text-anchor="middle">i7-7700T · 16 GB · HD630</text>
+        <rect x="22" y="236" width="378" height="44" rx="5" fill="#fff" stroke="#93c5fd"/><text x="211" y="254" text-anchor="middle">MetalLB L2 pool .240–.250 · Traefik .243 · petros .240 · energia .241</text><text x="211" y="269" text-anchor="middle">energia-website .242 · godseye .244 · family PCs and phones</text>
+        <rect x="430" y="140" width="280" height="96" rx="8" fill="#fdf4ff" stroke="#a21caf"/>
+        <text x="440" y="158" font-weight="700" fill="#701a75">IOT VLAN 10 · 192.168.0.0/24</text>
+        <text x="440" y="176">Reolink E1 ×2 · Wyze Pan ×2 · Blink Sync ×2</text>
+        <text x="440" y="192">Shelly and other smart devices</text>
+        <text x="440" y="212" fill="#701a75">worker-02 wlp1s0 192.168.0.87 (Wi-Fi leg),</text>
+        <text x="440" y="226" fill="#701a75">guarded by nftables table iot_wifi_guard</text>
+        <rect x="430" y="246" width="280" height="44" rx="8" fill="#f8fafc" stroke="#64748b"/><text x="570" y="264" text-anchor="middle" font-weight="700">Guest Wi-Fi (isolated)</text><text x="570" y="279" text-anchor="middle">WPA2-Personal, no LAN reach</text>
+        <line x1="300" y1="112" x2="210" y2="140" stroke="#334155"/><line x1="420" y1="112" x2="560" y2="140" stroke="#334155"/>
+        <line x1="400" y1="200" x2="430" y2="200" stroke="#a21caf" stroke-dasharray="4 3"/>
+      </g>
+    </svg>
+    <figcaption>Figure 2. Network topology. The dashed link is worker-02's deliberate Wi-Fi leg into the IOT VLAN, used for Wyze discovery.</figcaption>
+  </figure>
+  <h3>Notes engineers must know</h3>
+  <ul>
+    <li><b>Router isolation, not firewall rules.</b> On SRM 1.3, firewall rules don't filter traffic <i>between</i> local networks; the per-network <i>isolation</i> checkbox does. The six firewall rules created during setup are inert. Isolation is on for all three networks.</li>
+    <li><b>Calico address autodetection is pinned</b> (<code>cidrs: 192.168.1.0/24</code>). Without this, Calico could pick worker-02's IOT Wi-Fi address as the node IP and break pod networking. This setting lives in the cluster only (documented in the README); see §14.</li>
+    <li><b>worker-02 nftables guard</b> (<code>/etc/iot-wifi-guard.nft</code>, systemd <code>iot-wifi-guard</code>): drops new inbound connections from the IOT VLAN except UDP from the two Wyze cameras, and blocks the camera-bridge ports on <code>eno1</code> (TCP 1935, 1984, 5000, 5080, 8554, 8888, 8889, 9997; UDP 8000, 8001, 8189). Changes are validated with <code>nft -c</code> against a temporary file before install (<span class="mono">scripts/worker-02-firewall.sh</span>).</li>
+    <li><b>Node pinning.</b> Home Assistant (hostNetwork, needs LAN discovery and a stable address) and Frigate (needs the iGPU and is in the camera firewall allow-list) are pinned to worker-02. Authentik has node affinity that keeps it off the memory-constrained control plane.</li>
+  </ul>
+</div>
+
+<!-- 3 PLATFORM -->
+<div class="section">
+  <h2>3. Cluster platform layer</h2>
+  <table>
+    <tr><th style="width:18%">Component</th><th style="width:13%">Version</th><th style="width:20%">Managed by</th><th>Role and key configuration</th></tr>
+    <tr><td><b>k3s</b></td><td>v1.34.6+k3s1</td><td>Host install</td><td>Single server (openclaw) with two agents. Embedded datastore on the server: the control plane is <i>not</i> highly available (§14). Bundled Traefik and ServiceLB are replaced by the components below.</td></tr>
+    <tr><td><b>Calico</b></td><td>v3.31.2</td><td>Tigera operator</td><td>CNI and NetworkPolicy enforcement. Pod CIDR 10.42.0.0/16. Autodetection pinned to the primary LAN CIDR.</td></tr>
+    <tr><td><b>MetalLB</b></td><td>v0.14.8</td><td>Manifests</td><td>Layer-2 LoadBalancer IPs from .240–.250 (outside the router's DHCP range).</td></tr>
+    <tr><td><b>Traefik</b></td><td>v3.7.9 (chart 41.1.1)</td><td>Helm</td><td>Ingress controller on .243. Middlewares for Authentik ForwardAuth. Serves HTTPS internally with its default certificate, which the tunnel trusts with verification disabled.</td></tr>
+    <tr><td><b>Longhorn</b></td><td>v1.11.1</td><td>Helm</td><td>Replicated block storage. Classes: <code>longhorn</code> (3 replicas), <code>longhorn-single</code> (1), <code>longhorn-static</code>, plus <code>local-path</code>. Classes are set explicitly on every PVC.</td></tr>
+    <tr><td><b>Argo CD</b></td><td>v3.3.8</td><td>Manifests</td><td>GitOps controller, 13 Applications (§8). UI at <code>argocd.192.168.1.243.nip.io</code> (LAN only).</td></tr>
+    <tr><td><b>Argo CD Image Updater</b></td><td>v1.1.1</td><td>Manifests</td><td>Used by Energia and Godseye only: watches GHCR and writes image overrides into the Argo Application.</td></tr>
+    <tr><td><b>Sealed Secrets</b></td><td>chart 2.22.0</td><td>Argo CD (Helm source)</td><td>Controller in <code>kube-system</code>. Sealing key backed up offline in an encrypted archive. Never committed.</td></tr>
+    <tr><td><b>Intel GPU device plugin</b></td><td>—</td><td>Argo CD (cameras)</td><td>Exposes <code>/dev/dri</code> on worker-02 as <code>gpu.intel.com/i915</code> for Frigate's OpenVINO detector.</td></tr>
+  </table>
+  <h3>Resource posture</h3>
+  <p>The workers have headroom (about 46–57% memory used). <b>openclaw is the constraint</b>: 8 GB, typically 66–79% used, of which roughly 1.8 GB is the k3s server process and about 3.5 GB sits outside pods. Treat new DaemonSets and any workload without node affinity as a risk to the control plane. Most workloads run a single replica without PodDisruptionBudgets, so a node drain causes short outages (acceptable for a home lab, and noted in §14).</p>
+</div>
+
+<!-- 4 EDGE -->
+<div class="section">
+  <h2>4. Edge, ingress and request routing</h2>
+  <p>All public hostnames are under <code>energiapower.llc</code>, proxied by Cloudflare. <code>cloudflared</code> (2026.10.3, token-managed, namespace <code>default</code>) holds an outbound tunnel; the <b>hostname → origin routes are configured in the Cloudflare dashboard, not in git</b> (§14). There are two routing patterns:</p>
+  <table>
+    <tr><th style="width:22%">Pattern</th><th style="width:34%">Tunnel origin</th><th>Used by</th></tr>
+    <tr><td><b>A. Direct to Service</b></td><td><code>http://&lt;svc&gt;.&lt;ns&gt;.svc.cluster.local</code></td><td>Apps with their own login: hub, CRM, Investco, Petros (<code>ai.</code>), PDF Edit, Godseye, website, Grafana, Authentik, Home Assistant.</td></tr>
+    <tr><td><b>B. Through Traefik + ForwardAuth</b></td><td><code>https://traefik.traefik.svc.cluster.local:443</code>, "No TLS Verify", Host header preserved</td><td>Apps with no login of their own: Prometheus, Alertmanager, Frigate, Longhorn.</td></tr>
+  </table>
+  <div class="note risk"><b>Rule: never point a pattern-B hostname straight at its Service.</b>Doing so skips the ForwardAuth middleware and publishes an unauthenticated admin tool to the internet. This applies especially to Longhorn, which can delete backups.</div>
+  <figure>
+    <svg viewBox="0 0 720 260" width="100%" role="img" aria-label="ForwardAuth sequence">
+      <defs><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="9">
+        <g font-weight="700" text-anchor="middle">
+          <rect x="10" y="6" width="90" height="24" rx="4" fill="#eef2ff" stroke="#2563eb"/><text x="55" y="22">Browser</text>
+          <rect x="150" y="6" width="100" height="24" rx="4" fill="#fff7ed" stroke="#b45309"/><text x="200" y="22">Cloudflare+tunnel</text>
+          <rect x="300" y="6" width="90" height="24" rx="4" fill="#ecfeff" stroke="#0f8b8d"/><text x="345" y="22">Traefik</text>
+          <rect x="440" y="6" width="120" height="24" rx="4" fill="#f5f3ff" stroke="#6d28d9"/><text x="500" y="22">Authentik outpost</text>
+          <rect x="610" y="6" width="100" height="24" rx="4" fill="#f0fdf4" stroke="#15803d"/><text x="660" y="22">Frigate :8971</text>
+        </g>
+        <g stroke="#94a3b8" stroke-dasharray="3 3"><line x1="55" y1="30" x2="55" y2="252"/><line x1="200" y1="30" x2="200" y2="252"/><line x1="345" y1="30" x2="345" y2="252"/><line x1="500" y1="30" x2="500" y2="252"/><line x1="660" y1="30" x2="660" y2="252"/></g>
+        <g stroke="#334155">
+          <line x1="55" y1="48" x2="198" y2="48" marker-end="url(#m2)"/><text x="60" y="44">GET frigate.energiapower.llc (TLS)</text>
+          <line x1="200" y1="68" x2="343" y2="68" marker-end="url(#m2)"/><text x="205" y="64">HTTPS, Host preserved</text>
+          <line x1="345" y1="88" x2="498" y2="88" marker-end="url(#m2)"/><text x="350" y="84">forwardAuth /outpost…/auth/traefik</text>
+          <line x1="500" y1="110" x2="57" y2="110" marker-end="url(#m2)"/><text x="230" y="106">no session → 302 to auth.energiapower.llc (password + TOTP)</text>
+          <line x1="55" y1="134" x2="498" y2="134" marker-end="url(#m2)"/><text x="160" y="130">callback with session cookie, then retry the request</text>
+          <line x1="500" y1="156" x2="347" y2="156" marker-end="url(#m2)"/><text x="365" y="152">200 + X-authentik-* headers</text>
+          <line x1="345" y1="178" x2="658" y2="178" marker-end="url(#m2)"/><text x="400" y="174">proxied, user and groups in headers</text>
+          <line x1="660" y1="200" x2="57" y2="200" marker-end="url(#m2)"/><text x="300" y="196">response</text>
+        </g>
+        <text x="360" y="236" text-anchor="middle" fill="#5b6475">Longhorn uses a dedicated authorization flow with a 0-second reauthentication threshold: a fresh TOTP on every new session (1-hour cookie).</text>
+      </g>
+    </svg>
+    <figcaption>Figure 3. Pattern B: ForwardAuth through Traefik and the embedded Authentik proxy outpost. Frigate trusts the forwarded user headers (header mapping) and runs its own auth only on the internal port.</figcaption>
+  </figure>
+  <h3>Operational gotchas</h3>
+  <ul>
+    <li>Renaming a tunnel route can leave its DNS record missing. Check authoritative DNS, and find the active hostnames in cloudflared's "Updated to new configuration" log line.</li>
+    <li>Home Assistant sees traffic from pod and node addresses: <code>trusted_proxies</code> (10.42.0.0/16 plus the three node IPs) is set in the HA UI, because HA 2026.10 ignores the YAML <code>http:</code> block after a one-time import.</li>
+    <li>LAN-only access to the hub (<code>hub.192.168.1.243.nip.io</code>) goes through a Traefik Ingress. Public access goes through the tunnel (pattern A).</li>
+  </ul>
+</div>
+
+<!-- 5 IAM -->
+<div class="section">
+  <h2>5. Identity and access management</h2>
+  <div class="grid2">
+    <div class="card"><h4>Authentik 2026.8.5</h4><ul>
+      <li>Helm chart via a multi-source Argo CD Application (<code>platform/authentik/argocd-application.yaml</code>, <b>applied by hand</b>).</li>
+      <li>Own PostgreSQL StatefulSet (NetworkPolicy-restricted). Node affinity keeps it off openclaw.</li>
+      <li>Email via Resend as <code>no-reply@energiapower.llc</code>. DMARC <code>p=none</code>.</li>
+      <li><code>akadmin</code> protected with TOTP plus static recovery tokens.</li></ul></div>
+    <div class="card"><h4>Configuration as code: blueprints</h4><ul>
+      <li><code>platform/authentik/manifests/blueprints.yaml</code> declares the providers, applications, groups and the outpost's provider list.</li>
+      <li>OAuth2 providers on v2026 need <code>grant_types</code> set explicitly.</li>
+      <li>Validate before pushing with <code>Importer.validate()</code> in <code>ak shell</code>.</li></ul></div>
+  </div>
+  <h3>Groups and authorization</h3>
+  <table>
+    <tr><th style="width:18%">Group</th><th>Grants</th><th style="width:30%">Enforced where</th></tr>
+    <tr><td><b>admins</b></td><td>All tiles, the <code>/manage</code> pages, and the ForwardAuth apps Prometheus, Alertmanager and Longhorn</td><td>Hub (session groups claim); Authentik application policies</td></tr>
+    <tr><td><b>hub-family</b></td><td>Every tile with audience <code>family</code>, plus Frigate</td><td>Hub tile filter (server-side); Frigate provider policy</td></tr>
+    <tr><td><b>hub-limited</b></td><td>Tiles with audience <code>everyone</code> only (none yet)</td><td>Hub tile filter</td></tr>
+  </table>
+  <h3>Hub authentication</h3>
+  <p>The hub is an OIDC relying party using <b>next-auth 4</b> (stable line). <code>src/proxy.ts</code> (the Next.js 16 replacement for <code>middleware.ts</code>) requires a session token on every route except <code>/api/auth</code>, <code>/api/health</code>, <code>/sign-in</code> and static assets. Authorization (<code>src/lib/access.ts</code>) maps the groups claim to tile audiences <b>server-side</b>: hidden tiles are never sent to the browser. Sign-out is hub-only by design; the Authentik session lasts until the browser closes.</p>
+  <div class="note"><b>Why not ForwardAuth for everything?</b>Apps with their own auth (CRM, Investco, Petros…) would force a double login, and Home Assistant's companion app can't complete a browser-based ForwardAuth flow. The rule is: ForwardAuth only for software that has no authentication of its own.</div>
+</div>
+
+<!-- 6 HUB -->
+<div class="section">
+  <h2>6. The hub application</h2>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Stack</h3>
+      <ul>
+        <li><b>Next.js 16.4.5</b>, React 19.3, TypeScript 5, App Router. Read <code>node_modules/next/dist/docs</code> before coding: this major version has breaking changes (see <code>AGENTS.md</code>).</li>
+        <li><b>PostgreSQL 17.11</b> StatefulSet in <code>hub</code>, accessed with the <code>postgres</code> (porsager) client.</li>
+        <li>Container <code>node:22-alpine</code> multi-stage, uid 1001, read-only root filesystem, all capabilities dropped.</li>
+        <li>Unit tests: <b>Vitest 5</b>. Every <code>src/lib</code> module has a test file (access, app-input, apps, backup-history, backups, cluster-health, health, search, status).</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Source map</h3>
+<pre>src/
+  proxy.ts            session gate (all routes)
+  instrumentation.ts  startup: run migrations
+  app/page.tsx        tile grid, search (Ctrl+K)
+  app/manage/         admin CRUD, audit log
+    health/           node + workload usage
+    backups/          backup status, Back up now
+  app/api/health      liveness for probes/tiles
+  lib/migrate.ts      ordered SQL migrations
+  lib/status.ts       in-cluster tile checks
+  lib/kube.ts         Kubernetes API client (SA token)
+  lib/backups.ts      Longhorn CRD reads/creates</pre>
+    </div>
+  </div>
+  <h3>Data model and migrations</h3>
+  <p>Migrations are an ordered array of SQL strings in <code>src/lib/migrate.ts</code>, applied once each at startup inside a transaction guarded by <code>pg_advisory_xact_lock</code> (safe with concurrent pods) and recorded in <code>schema_migrations</code>. <b>Never edit an existing migration; append a new one.</b> Tables: <code>apps</code> (name, description, url, status_url, category, audience, hidden, sort_order) and <code>audit_log</code> (actor, action, target, detail jsonb). Every change made through Manage writes an audit row.</p>
+  <h3>Status, health and backups</h3>
+  <ul>
+    <li><b>Tile status lights</b> probe each app's <code>status_url</code> <i>from inside the cluster</i> (Service DNS), not its public URL, so a Cloudflare problem doesn't show as an app outage. The page refreshes every 30 seconds.</li>
+    <li><b>Health page</b> reads node and pod metrics through the Kubernetes API using the pod's ServiceAccount token (<code>lib/kube.ts</code>), with per-node pod usage (<code>buildWorkloads</code>).</li>
+    <li><b>Backups page</b> reads Longhorn <code>volumes</code>, <code>backups</code>, <code>backuptargets</code> and <code>snapshots</code>, and can <i>create</i> snapshots and backups. The RBAC is a namespaced Role in <code>longhorn-system</code> (<code>platform/longhorn-backup/manifests/hub-backup-access.yaml</code>) with verbs <code>get</code>, <code>list</code> and <code>create</code> only: no delete, no restore.</li>
+  </ul>
+  <h3>Extending the hub: checklist</h3>
+  <ol>
+    <li>Pure logic goes in <code>src/lib/*.ts</code> with a matching <code>*.test.ts</code>. UI in <code>src/app</code>. Server components by default.</li>
+    <li>Schema change: append to <code>migrations</code>. Data change: through Manage (audited), not SQL.</li>
+    <li>Needs a new Kubernetes permission: add a narrowly scoped Role in the namespace that owns the resource, never a ClusterRole with wildcards.</li>
+    <li>Run locally: <code>npm run lint &amp;&amp; npm run typecheck &amp;&amp; npm test &amp;&amp; npm run build</code>. CI runs the same steps plus <code>npm audit</code>, Gitleaks and Semgrep.</li>
+  </ol>
+</div>
+
+<!-- 7 CICD -->
+<div class="section">
+  <h2>7. CI/CD and release engineering</h2>
+  <p>Each application has its own repository, pipeline and Argo CD Application. Release mechanics vary by app today; standardizing them is a roadmap item (§16).</p>
+  <figure>
+    <svg viewBox="0 0 720 210" width="100%" role="img" aria-label="Hub pipeline">
+      <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="9">
+        <text x="6" y="14" font-weight="700" fill="#475569">home-lab-hub: push to main</text>
+        <rect x="6" y="24" width="132" height="92" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="72" y="40" text-anchor="middle" font-weight="700">ci.yml (reusable)</text><text x="14" y="56">npm ci · lint · typecheck</text><text x="14" y="70">vitest · npm audit (high)</text><text x="14" y="84">next build</text><text x="14" y="98">Gitleaks (history)</text><text x="14" y="111">Semgrep</text>
+        <rect x="156" y="24" width="132" height="92" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="222" y="40" text-anchor="middle" font-weight="700">build-and-push.yml</text><text x="164" y="56">tag = 0.1.0.&lt;run_number&gt;</text><text x="164" y="70">buildx → scan image</text><text x="164" y="84">Trivy 0.76.1</text><text x="164" y="98">HIGH/CRITICAL, fixed</text><text x="164" y="111">→ exit 1 (gate)</text>
+        <rect x="306" y="24" width="122" height="92" rx="6" fill="#f0fdf4" stroke="#15803d"/><text x="367" y="40" text-anchor="middle" font-weight="700">Publish</text><text x="314" y="56">push ghcr.io/daav817/</text><text x="314" y="70">home-lab-hub:&lt;tag&gt;</text><text x="314" y="84">sed newTag in</text><text x="314" y="98">k8s/kustomization.yaml</text><text x="314" y="111">bot commit to main</text>
+        <rect x="446" y="24" width="122" height="92" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="507" y="40" text-anchor="middle" font-weight="700">Argo CD</text><text x="454" y="56">app home-lab-hub</text><text x="454" y="70">detects the new commit</text><text x="454" y="84">kustomize build</text><text x="454" y="98">rolling update (1 replica)</text><text x="454" y="111">prune + selfHeal</text>
+        <rect x="586" y="24" width="128" height="92" rx="6" fill="#f8fafc" stroke="#334155"/><text x="650" y="40" text-anchor="middle" font-weight="700">Verify</text><text x="594" y="56">readiness /api/health</text><text x="594" y="70">migrations at startup</text><text x="594" y="84">version shown on</text><text x="594" y="98">the home page</text>
+        <line x1="138" y1="70" x2="154" y2="70" stroke="#334155" marker-end="url(#m3)"/><line x1="288" y1="70" x2="304" y2="70" stroke="#334155" marker-end="url(#m3)"/><line x1="428" y1="70" x2="444" y2="70" stroke="#334155" marker-end="url(#m3)"/><line x1="568" y1="70" x2="584" y2="70" stroke="#334155" marker-end="url(#m3)"/>
+        <text x="6" y="146" font-weight="700" fill="#475569">petros-ai: push to main (quality_gate.yml)</text>
+        <rect x="6" y="154" width="164" height="50" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="88" y="170" text-anchor="middle" font-weight="700">Version</text><text x="88" y="184" text-anchor="middle">VERSION (MAJOR.MINOR) + next</text><text x="88" y="196" text-anchor="middle">patch after newest v-tag</text>
+        <rect x="186" y="154" width="164" height="50" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="268" y="170" text-anchor="middle" font-weight="700">Build once, test inside it</text><text x="268" y="184" text-anchor="middle">docker exec run_ci.py: 15 physics</text><text x="268" y="196" text-anchor="middle">+ Playwright UX (E2E skipped)</text>
+        <rect x="366" y="154" width="164" height="50" rx="6" fill="#f0fdf4" stroke="#15803d"/><text x="448" y="170" text-anchor="middle" font-weight="700">Release</text><text x="448" y="184" text-anchor="middle">push :&lt;semver&gt; (no :latest)</text><text x="448" y="196" text-anchor="middle">bot commit k8s image [skip ci] + tag</text>
+        <rect x="546" y="154" width="168" height="50" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="630" y="170" text-anchor="middle" font-weight="700">Argo CD</text><text x="630" y="184" text-anchor="middle">syncs the release commit</text><text x="630" y="196" text-anchor="middle">/health reports the version</text>
+        <line x1="170" y1="179" x2="184" y2="179" stroke="#334155" marker-end="url(#m3)"/><line x1="350" y1="179" x2="364" y2="179" stroke="#334155" marker-end="url(#m3)"/><line x1="530" y1="179" x2="544" y2="179" stroke="#334155" marker-end="url(#m3)"/>
+      </g>
+    </svg>
+    <figcaption>Figure 4. Two reference pipelines. Both end with a bot commit that pins the image version in git; Argo CD deploys from git, never from a floating tag.</figcaption>
+  </figure>
+  <h3>Release strategies in use</h3>
+  <table>
+    <tr><th style="width:15%">App</th><th style="width:30%">Version scheme</th><th style="width:30%">How the cluster learns the version</th><th>Quality gate</th></tr>
+    <tr><td>home-lab-hub</td><td><code>0.1.0.&lt;run&gt;</code></td><td>Bot commit to <code>kustomization.yaml</code> <code>newTag</code></td><td>Lint, types, Vitest, audit, Gitleaks, Semgrep, Trivy</td></tr>
+    <tr><td>petros-ai</td><td>SemVer: <code>VERSION</code> + patch from git tags (<code>v2.4.4</code>)</td><td>Bot commit to <code>k8s/deployment.yaml</code> plus annotated tag, <code>[skip ci]</code>; <code>concurrency</code> serializes releases</td><td>Tests run inside the built image (physics plus Playwright)</td></tr>
+    <tr><td>investco</td><td><code>v0.1.x</code></td><td><code>chore(release)</code> bot commit</td><td>Per-repo</td></tr>
+    <tr><td>energia, godseye</td><td>Image tags in GHCR</td><td><b>Argo CD Image Updater</b> (<code>latest</code> strategy, write-back <code>argocd</code>)</td><td>Per-repo</td></tr>
+    <tr><td>pdf-edit, website</td><td>Per-repo convention (version.run_number)</td><td>Bot commit pinning <code>newTag</code></td><td>Per-repo</td></tr>
+  </table>
+  <div class="note warn"><b>Image Updater with write-back <code>argocd</code></b>The deployed version lives in the Application object, not in git, so git no longer describes what's running for Energia and Godseye. Prefer write-back <code>git</code> or the bot-commit pattern (§16).</div>
+  <h3>Release engineering conventions</h3>
+  <ul>
+    <li><b>Third-party Actions are pinned by commit SHA</b>, with the version in a comment. Renovate (hub repo only) proposes bumps. The <code>protect-main</code> ruleset blocks deletion and force-push; PR and status-check rules are deliberately off so the bot's pin commit isn't blocked.</li>
+    <li><b>Bot commits must not trigger a release loop</b>: commits made with <code>GITHUB_TOKEN</code> don't start workflows, and <code>[skip ci]</code> covers it anyway. Before committing locally, pull first.</li>
+    <li><b>Rollback</b> = revert the bot's pin commit (or set the previous tag) and let Argo CD sync. Never <code>kubectl set image</code>: selfHeal reverts it.</li>
+    <li><b>Petros CI uses the production database</b> (<code>DATABASE_URL</code> secret) for the login test. Test isolation is a roadmap item.</li>
+  </ul>
+</div>
+
+<!-- 8 GITOPS -->
+<div class="section">
+  <h2>8. GitOps and configuration management</h2>
+  <table>
+    <tr><th style="width:18%">Application</th><th style="width:34%">Source</th><th style="width:14%">Namespace</th><th>Sync policy</th></tr>
+    <tr><td>home-lab-hub</td><td>home-lab-hub · <code>k8s/</code> (kustomize)</td><td>hub</td><td>auto, prune, selfHeal</td></tr>
+    <tr><td>cameras</td><td>home-lab-hub · <code>platform/cameras/manifests</code> (kustomize, configMapGenerator)</td><td>cameras</td><td>auto, prune, selfHeal</td></tr>
+    <tr><td>home-assistant</td><td>home-lab-hub · <code>platform/home-assistant/manifests</code></td><td>home-assistant</td><td>auto, selfHeal</td></tr>
+    <tr><td>longhorn-backup</td><td>home-lab-hub · <code>platform/longhorn-backup/manifests</code></td><td>longhorn-system</td><td>auto, selfHeal</td></tr>
+    <tr><td>monitoring-access</td><td>home-lab-hub · <code>platform/monitoring-access/manifests</code></td><td>monitoring</td><td>auto, selfHeal</td></tr>
+    <tr><td>authentik</td><td>Helm chart 2026.8.5 + home-lab-hub blueprints (multi-source)</td><td>authentik</td><td>auto, selfHeal</td></tr>
+    <tr><td>sealed-secrets</td><td>Helm chart 2.22.0</td><td>kube-system</td><td>auto, selfHeal</td></tr>
+    <tr><td>energia · investco · petros-ai</td><td>own repos · <code>k8s/</code> (HEAD)</td><td>default · investco · default</td><td>auto, prune, selfHeal</td></tr>
+    <tr><td>godseye · pdf-edit · energia-website</td><td>own repos · <code>deploy/k8s</code> or <code>k8s/</code></td><td>godseye · pdf-edit · energia-web</td><td>auto, prune, selfHeal</td></tr>
+  </table>
+  <h3>What is <i>not</i> in git (configuration drift risk)</h3>
+  <table>
+    <tr><th style="width:30%">Item</th><th>Where it lives / how it's changed</th></tr>
+    <tr><td>Cloudflare tunnel routes and DNS</td><td>Cloudflare dashboard (token-managed tunnel)</td></tr>
+    <tr><td>Monitoring stack, Longhorn, Traefik</td><td>Helm releases installed by hand (<code>helm list -A</code>)</td></tr>
+    <tr><td>The Argo Application for Authentik (and other apps' Application objects)</td><td><code>kubectl apply</code> by hand (convention: <code>k8s/argocd-application.yaml</code> per repo)</td></tr>
+    <tr><td>Grafana's Loki data source</td><td>Grafana's database (added in the UI)</td></tr>
+    <tr><td>Frigate runtime config</td><td>Seeded once from a ConfigMap (<code>[ -f config.yml ] || cp</code>). Later changes are written to the PVC after checking that the live file matches the previous seed.</td></tr>
+    <tr><td>Home Assistant dashboards and integrations</td><td>HA <code>.storage</code>. The Cameras dashboard is generated by <code>scripts/make-cameras-dashboard.py</code> and pasted into the raw editor.</td></tr>
+    <tr><td>Calico autodetection, worker-02 nftables, k3s flags</td><td>Node and cluster state, documented in the README and <code>scripts/</code></td></tr>
+  </table>
+  <h3>Secrets workflow</h3>
+<pre># Values are piped from a hidden prompt; nothing is echoed or written to disk unencrypted.
+kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=client -o yaml \
+  | .tools/kubeseal.exe --format yaml &gt; path/NAME.sealedsecret.yaml   # commit this file
+# Helper scripts: scripts/seal-*.py / seal-*.ps1 (MQTT, Neolink, Wyze, camera streams, Petros)</pre>
+  <p>Never commit the sealing key, <code>.tools/</code> or any backup archive. A SealedSecret is bound to its name and namespace (strict scope), so renaming means resealing.</p>
+</div>
+
+<!-- 9 DATA -->
+<div class="section">
+  <h2>9. Data persistence, backup and recovery</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" width="100%" role="img" aria-label="Backup architecture">
+      <defs><marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="9">
+        <rect x="6" y="10" width="190" height="190" rx="8" fill="#f0fdf4" stroke="#15803d"/><text x="101" y="28" text-anchor="middle" font-weight="700">Longhorn volumes</text>
+        <text x="16" y="46" font-weight="700" fill="#15803d">group critical-data (nightly)</text>
+        <text x="16" y="60">energia-postgres · hub-postgres</text><text x="16" y="73">authentik-postgresql · investco-pg</text><text x="16" y="86">godseye-auth · petros-backups</text><text x="16" y="99">home-assistant-config · frigate-config</text><text x="16" y="112">grafana</text>
+        <text x="16" y="132" font-weight="700" fill="#5b6475">not backed up (by design)</text>
+        <text x="16" y="146">frigate-media · prometheus · loki</text><text x="16" y="159">alertmanager · godseye-cache</text><text x="16" y="172">mosquitto · blink-bridge · wyze</text><text x="16" y="185">petros-models-pvc (legacy)</text>
+        <rect x="230" y="10" width="170" height="52" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="315" y="28" text-anchor="middle" font-weight="700">daily-snapshot 02:00</text><text x="315" y="42" text-anchor="middle">group default · retain 7</text><text x="315" y="55" text-anchor="middle">weekly-snapshot Sun 03:00 · 4</text>
+        <rect x="230" y="76" width="170" height="52" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="315" y="94" text-anchor="middle" font-weight="700">nightly-backup 03:30</text><text x="315" y="108" text-anchor="middle">group critical-data · retain 14</text><text x="315" y="121" text-anchor="middle">incl. detached volumes</text>
+        <rect x="230" y="142" width="170" height="58" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="315" y="160" text-anchor="middle" font-weight="700">CronJob petros-export 07:30Z</text><text x="315" y="174" text-anchor="middle">pg_dump Supabase public schema</text><text x="315" y="187" text-anchor="middle">+ rclone GCS bucket → PVC</text>
+        <rect x="440" y="76" width="140" height="52" rx="6" fill="#f8fafc" stroke="#334155"/><text x="510" y="94" text-anchor="middle" font-weight="700">Backup target</text><text x="510" y="108" text-anchor="middle">CIFS (SMB 2.0, soft)</text><text x="510" y="121" text-anchor="middle">router k8s-storage-folder</text>
+        <rect x="600" y="10" width="114" height="190" rx="8" fill="#fef2f2" stroke="#b91c1c"/><text x="657" y="28" text-anchor="middle" font-weight="700">Alerts</text>
+        <text x="608" y="46">LonghornBackupFailed</text><text x="608" y="60">LonghornBackupOverdue</text><text x="608" y="74">PetrosExportOverdue</text><text x="608" y="88">LonghornVolumeNot-</text><text x="618" y="100">Healthy</text><text x="608" y="114">LonghornDiskNearlyFull</text><text x="608" y="128">LonghornMetricsMissing</text><text x="608" y="142">KubeJobFailed (stock)</text>
+        <line x1="196" y1="40" x2="228" y2="36" stroke="#334155" marker-end="url(#m4)"/><line x1="196" y1="102" x2="228" y2="102" stroke="#334155" marker-end="url(#m4)"/><line x1="400" y1="102" x2="438" y2="102" stroke="#334155" marker-end="url(#m4)"/><line x1="315" y1="142" x2="196" y2="80" stroke="#334155" stroke-dasharray="3 3" marker-end="url(#m4)"/>
+      </g>
+    </svg>
+    <figcaption>Figure 5. Data protection. Volume group membership is set with PVC labels (<code>recurring-job-group.longhorn.io/critical-data=enabled</code>).</figcaption>
+  </figure>
+  <h3>Objectives and evidence</h3>
+  <table>
+    <tr><th style="width:24%">Measure</th><th>Current state</th></tr>
+    <tr><td><b>RPO (data loss window)</b></td><td>≤ 24 h to separate hardware (nightly backup). ≤ 24 h in-cluster (daily snapshot). Petros: ≤ 24 h via the nightly export.</td></tr>
+    <tr><td><b>RTO (time to restore)</b></td><td>About 5–15 minutes per database volume (restore into a new PVC from the backup URL, then repoint). Not yet rehearsed as a whole-cluster rebuild.</td></tr>
+    <tr><td><b>Restore tests</b></td><td><code>scripts/restore-test.ps1</code> (hub: row counts and MD5 per table match). <code>scripts/restore-test-energia.ps1</code> (45 of 45 tables, Nov 9). <code>scripts/petros-restore-test.yaml</code> (11 tables; models match active records).</td></tr>
+    <tr><td><b>Crash consistency</b></td><td>Longhorn backups are block-level and crash-consistent. Postgres replays WAL on start, which the restore tests exercise. Logical dumps (<code>pg_dump</code>) are only used for Petros.</td></tr>
+    <tr><td><b>Off-site copy</b></td><td><b>None</b>: the backup target sits in the same building as the cluster. This is the top Phase 7 item.</td></tr>
+  </table>
+  <h3>Restore procedure (reference)</h3>
+<pre>1. Longhorn UI (step-up 2FA) or kubectl: find the backup URL for the volume (backups.longhorn.io, label backup-volume=&lt;pv&gt;).
+2. Create a StorageClass with parameters.fromBackup=&lt;url&gt; (see restore-test scripts), then a PVC from it.
+3. Scale the app's StatefulSet to 0, swap the claim (or copy data), scale back to 1.
+4. Verify with the matching restore-test fingerprint, then remove the temporary StorageClass.</pre>
+</div>
+
+<!-- 10 OBS -->
+<div class="section">
+  <h2>10. Observability and alerting</h2>
+  <table>
+    <tr><th style="width:18%">Component</th><th style="width:18%">Version</th><th>Configuration</th></tr>
+    <tr><td>kube-prometheus-stack</td><td>chart 88.6.3</td><td>Prometheus v3.14 (10-day retention; volume removed from the default snapshot group via <code>scripts/label-metrics-volumes.ps1</code>), Alertmanager v0.34, Grafana, node-exporter, kube-state-metrics. Helm-managed by hand.</td></tr>
+    <tr><td>Loki + Promtail</td><td>chart 7.3.0 (3.6) / 6.17.1</td><td>Logs from all three nodes. <b>No retention set</b> (about 0.05 GB/day, 2.6 of 20 GB). Data source added in the Grafana UI.</td></tr>
+    <tr><td>Alertmanager routing</td><td>—</td><td>Email through Gmail SMTP to the admin mailbox. Verified with a synthetic test alert.</td></tr>
+    <tr><td>Exposure</td><td>—</td><td>Grafana: own login, public. Prometheus and Alertmanager: Authentik ForwardAuth, admins only (<code>platform/monitoring-access</code>). Loki: through Grafana only.</td></tr>
+    <tr><td>Custom rules</td><td>—</td><td>Longhorn group (§9) in <code>platform/longhorn-backup/manifests/monitoring.yaml</code>, plus a Longhorn ServiceMonitor.</td></tr>
+  </table>
+  <p><b>Golden signals coverage today:</b> availability (hub tile probes, kube-state-metrics), saturation (node memory and disk, Longhorn disk), and errors (pod restarts, Job failures). Application-level latency and error-rate SLIs are <i>not</i> instrumented. Apps don't export metrics, so this is part of the §16 roadmap.</p>
+  <div class="note"><b>Diagnosing a problem: where to look</b>(1) Hub Health page → (2) Grafana dashboards → (3) Loki: <code>{namespace="cameras", container="bridge"}</code> → (4) <code>kubectl describe</code> / events → (5) Argo CD app diff (drift or a failed sync).</div>
+</div>
+
+<!-- 11 CAMERAS -->
+<div class="section">
+  <h2>11. Camera and IoT subsystem</h2>
+  <figure>
+    <svg viewBox="0 0 720 300" width="100%" role="img" aria-label="Camera subsystem">
+      <defs><marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="8.8">
+        <rect x="4" y="10" width="112" height="44" rx="5" fill="#fdf4ff" stroke="#a21caf"/><text x="60" y="28" text-anchor="middle" font-weight="700">Reolink E1 ×2</text><text x="60" y="42" text-anchor="middle">Baichuan (IOT VLAN)</text>
+        <rect x="4" y="70" width="112" height="44" rx="5" fill="#fdf4ff" stroke="#a21caf"/><text x="60" y="88" text-anchor="middle" font-weight="700">Blink ×3 (2 Sync)</text><text x="60" y="102" text-anchor="middle">Blink cloud (IMMIS)</text>
+        <rect x="4" y="130" width="112" height="44" rx="5" fill="#fdf4ff" stroke="#a21caf" stroke-dasharray="4 3"/><text x="60" y="148" text-anchor="middle" font-weight="700">Wyze Pan ×2</text><text x="60" y="162" text-anchor="middle">TUTK (paused)</text>
+        <rect x="140" y="10" width="120" height="44" rx="5" fill="#ecfeff" stroke="#0f8b8d"/><text x="200" y="28" text-anchor="middle" font-weight="700">neolink v0.6.2</text><text x="200" y="42" text-anchor="middle">RTSP :8554, MQTT PTZ</text>
+        <rect x="140" y="64" width="120" height="58" rx="5" fill="#ecfeff" stroke="#0f8b8d"/><text x="200" y="80" text-anchor="middle" font-weight="700">blink-bridge</text><text x="200" y="94" text-anchor="middle">Python (blinkpy 0.25.9)</text><text x="200" y="107" text-anchor="middle">+ go2rtc 1.9.14 sidecar</text><text x="200" y="118" text-anchor="middle">RTSP :8554</text>
+        <rect x="140" y="130" width="120" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 3"/><text x="200" y="148" text-anchor="middle" font-weight="700">wyze-bridge 2.10.3</text><text x="200" y="162" text-anchor="middle">replicas: 0, hostNetwork</text>
+        <rect x="290" y="30" width="170" height="120" rx="7" fill="#f0fdf4" stroke="#15803d"/><text x="375" y="48" text-anchor="middle" font-weight="700">Frigate 0.18.2 (worker-02)</text><text x="300" y="64">go2rtc restream :8554</text><text x="300" y="78">detect + record roles</text><text x="300" y="92">OpenVINO on iGPU (i915)</text><text x="300" y="106">preset-vaapi decode</text><text x="300" y="120">media: 100Gi longhorn-single</text><text x="300" y="134">UI :8971 (ForwardAuth)</text>
+        <rect x="290" y="176" width="170" height="54" rx="7" fill="#fff7ed" stroke="#b45309"/><text x="375" y="194" text-anchor="middle" font-weight="700">Mosquitto 2.0.22</text><text x="375" y="208" text-anchor="middle">users: homeassistant, frigate,</text><text x="375" y="220" text-anchor="middle">neolink, blink (per-user ACLs)</text>
+        <rect x="490" y="30" width="150" height="120" rx="7" fill="#f5f3ff" stroke="#6d28d9"/><text x="565" y="48" text-anchor="middle" font-weight="700">Home Assistant 2026.10.4</text><text x="500" y="64">hostNetwork on worker-02</text><text x="500" y="78">Frigate integ. 5.15.6 (sha256)</text><text x="500" y="92">Browser Mod 3.4.0 (sha256)</text><text x="500" y="106">packages: blink_live,</text><text x="500" y="120">parking_lot_alert</text><text x="500" y="134">own login + TOTP</text>
+        <rect x="660" y="30" width="56" height="54" rx="5" fill="#f8fafc" stroke="#334155"/><text x="688" y="54" text-anchor="middle" font-weight="700">Users</text><text x="688" y="68" text-anchor="middle">dash</text>
+        <rect x="660" y="96" width="56" height="54" rx="5" fill="#fef2f2" stroke="#b91c1c"/><text x="688" y="118" text-anchor="middle" font-weight="700">Chime</text><text x="688" y="132" text-anchor="middle">browser</text>
+        <line x1="116" y1="32" x2="138" y2="32" stroke="#334155" marker-end="url(#m5)"/><line x1="116" y1="92" x2="138" y2="92" stroke="#334155" marker-end="url(#m5)"/><line x1="116" y1="152" x2="138" y2="152" stroke="#94a3b8" stroke-dasharray="3 3" marker-end="url(#m5)"/>
+        <line x1="260" y1="32" x2="288" y2="60" stroke="#334155" marker-end="url(#m5)"/><line x1="260" y1="92" x2="288" y2="92" stroke="#334155" marker-end="url(#m5)"/>
+        <line x1="460" y1="90" x2="488" y2="90" stroke="#334155" marker-end="url(#m5)"/><line x1="375" y1="150" x2="375" y2="174" stroke="#334155" marker-end="url(#m5)"/>
+        <line x1="460" y1="200" x2="540" y2="152" stroke="#334155" marker-end="url(#m5)"/><line x1="260" y1="104" x2="300" y2="190" stroke="#334155" stroke-dasharray="3 3" marker-end="url(#m5)"/><line x1="230" y1="54" x2="300" y2="182" stroke="#334155" stroke-dasharray="3 3" marker-end="url(#m5)"/>
+        <line x1="640" y1="60" x2="658" y2="58" stroke="#334155" marker-end="url(#m5)"/><line x1="640" y1="118" x2="658" y2="122" stroke="#334155" marker-end="url(#m5)"/>
+        <text x="290" y="252" fill="#5b6475">Solid arrows: video. Dashed arrows: MQTT (discovery, commands, events).</text>
+      </g>
+    </svg>
+    <figcaption>Figure 6. Camera subsystem. Every source normalizes to RTSP, Frigate restreams it, and Home Assistant consumes Frigate's restream.</figcaption>
+  </figure>
+  <p><b>NetworkPolicies:</b> Frigate UI 8971 from <code>traefik</code> and <code>hub</code> only; Frigate API 5000 and RTSP 8554 from Home Assistant's node address (192.168.1.102) only; blink-bridge 8554 from the <code>cameras</code> namespace and Home Assistant; Mosquitto from the camera namespace and Home Assistant.</p>
+  <h3>The Blink bridge (custom component)</h3>
+  <p>Blink has no local streaming. <code>platform/cameras/manifests/blink-bridge/bridge.py</code> holds a single Blink session token (password never stored) and serves each camera as MPEG-TS on a localhost TCP port (18001–18003). The go2rtc sidecar turns that into RTSP using <code>ffmpeg:tcp://127.0.0.1:1800x#video=copy#audio=aac</code>; the audio is re-encoded because Blink's AAC arrives with a 0/0 sample rate. Dependencies are installed with <code>pip --require-hashes</code>, and the code ships as a kustomize <code>configMapGenerator</code>, so a code change rolls the pod.</p>
+  <figure>
+    <svg viewBox="0 0 720 172" width="100%" role="img" aria-label="Bridge state machine">
+      <defs><marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+      <g font-size="9" text-anchor="middle">
+        <path d="M600 62 C600 14 45 14 45 60" fill="none" stroke="#334155" marker-end="url(#m6)"/>
+        <text x="322" y="22" fill="#5b6475">Stop, wake timeout (25 s), no player (30 s), or no Continue within 2 min → idle</text>
+        <rect x="10" y="62" width="70" height="30" rx="15" fill="#f1f5f9" stroke="#334155"/><text x="45" y="81" font-weight="700">idle</text>
+        <rect x="150" y="62" width="84" height="30" rx="15" fill="#eef2ff" stroke="#2563eb"/><text x="192" y="81" font-weight="700">starting</text>
+        <rect x="300" y="100" width="70" height="30" rx="15" fill="#fff7ed" stroke="#b45309"/><text x="335" y="119" font-weight="700">slow</text>
+        <rect x="430" y="62" width="70" height="30" rx="15" fill="#f0fdf4" stroke="#15803d"/><text x="465" y="81" font-weight="700">live</text>
+        <rect x="560" y="62" width="84" height="30" rx="15" fill="#f5f3ff" stroke="#6d28d9"/><text x="602" y="81" font-weight="700">waiting</text>
+        <g stroke="#334155" fill="none">
+          <path d="M80 77 L148 77" marker-end="url(#m6)"/>
+          <path d="M234 77 L428 77" marker-end="url(#m6)"/>
+          <path d="M215 92 L298 112" marker-end="url(#m6)"/>
+          <path d="M370 112 L440 94" marker-end="url(#m6)"/>
+          <path d="M500 77 L558 77" marker-end="url(#m6)"/>
+          <path d="M644 84 C705 118 705 166 420 166 C250 166 172 150 178 94" marker-end="url(#m6)"/>
+        </g>
+        <text x="114" y="71">Start / motion</text>
+        <text x="330" y="71">≥150 KB of video</text>
+        <text x="258" y="122">first data,</text><text x="258" y="133">&lt;150 KB for 15 s</text>
+        <text x="420" y="112">≥150 KB</text>
+        <text x="529" y="71">Blink ends</text>
+        <text x="560" y="160">Continue (battery cameras only)</text>
+      </g>
+    </svg>
+    <figcaption>Figure 7. Battery camera session lifecycle. Wired cameras reconnect instead of waiting, with backoff kept on the camera object.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Battery protection:</b> a battery camera's port refuses players unless a session is running, so Frigate's reconnect attempts can never wake a camera. Sessions start only from the MQTT Start button or a Blink motion event.</li>
+    <li><b>Sync Module arbitration:</b> Blink allows one live view per Sync Module. A wired camera steps aside while a battery camera on the same <code>network_id</code> is in session, and resumes about 2 seconds after it ends.</li>
+    <li><b>Reconnect tolerance:</b> a 20-second player grace period, a prewarm buffer for players that connect late, Frigate stream <code>#timeout=30</code> and ffmpeg <code>-timeout 30000000</code>. The bridge sets go2rtc <b>preloads</b> through the local API (wired cameras always; battery cameras while live), so go2rtc's fixed 5-second DESCRIBE deadline is always met.</li>
+    <li><b>Upstream patch:</b> blinkpy 0.25.9's <code>recv</code> uses <code>read(n)</code> and treats split TCP segments as end-of-stream. The bridge replaces it with a <code>readexactly</code> loop. <b>Re-check this when upgrading blinkpy.</b></li>
+  </ul>
+</div>
+
+<!-- 12 SECURITY -->
+<div class="section">
+  <h2>12. Security model</h2>
+  <table>
+    <tr><th style="width:16%">Layer</th><th style="width:42%">Controls in place</th><th>Residual risk / next step</th></tr>
+    <tr><td><b>Edge</b></td><td>Cloudflare proxy and WAF, Always-HTTPS, outbound-only tunnel, no port forwards, UPnP off</td><td>Routes managed in a UI (no review trail); in-cluster hops are not end-to-end TLS</td></tr>
+    <tr><td><b>Identity</b></td><td>Authentik with mandatory TOTP for admins; invite-only enrollment; step-up 2FA for Longhorn; HA with its own TOTP</td><td>Recovery-code storage is manual; no WebAuthn yet; family accounts not yet enrolled</td></tr>
+    <tr><td><b>Authorization</b></td><td>Server-side tile filtering; ForwardAuth group policies; hub RBAC limited to read and create on Longhorn</td><td>Per-app auth quality varies (Petros auth hardened Nov 6)</td></tr>
+    <tr><td><b>Network</b></td><td>Three isolated LANs; worker-02 nftables guard; NetworkPolicies on databases (hub, authentik, investco), cameras and Mosquitto</td><td>No default-deny per namespace; several app namespaces have no policy</td></tr>
+    <tr><td><b>Workload</b></td><td>Hub: non-root, read-only root filesystem, dropped capabilities, seccomp RuntimeDefault, no SA token automount where unused</td><td>Older apps and some vendor images run as root; no Pod Security Admission labels</td></tr>
+    <tr><td><b>Secrets</b></td><td>SealedSecrets in git; sealing key offline; values entered through hidden prompts</td><td>No rotation schedule; secrets rotated once after a log exposure (Wyze)</td></tr>
+    <tr><td><b>Supply chain</b></td><td>SHA-pinned Actions; Trivy, Gitleaks, Semgrep; hash-pinned pip; SHA-256-checked HA add-ons; Renovate</td><td>Renovate and scanners on the hub repo only; no image signing (cosign) or SBOMs</td></tr>
+    <tr><td><b>Data</b></td><td>Replicated volumes; nightly backups; tested restores; backup-failure alerts</td><td>No off-site copy; backups not encrypted at rest on the router</td></tr>
+  </table>
+  <div class="note warn"><b>Change-control guardrail</b>Automation agents operating on this cluster are subject to a policy classifier. Actions that install external code, or use production credentials from inside pods, need explicit owner approval. Don't build workarounds: ask the owner.</div>
+</div>
+
+<!-- 13 RUNBOOK -->
+<div class="section">
+  <h2>13. Operations runbook</h2>
+  <table>
+    <tr><th style="width:27%">Task</th><th>Procedure</th></tr>
+    <tr><td><b>Deploy a change</b></td><td>Commit to the repo's <code>main</code>. The pipeline builds, tests, pins and pushes, then Argo CD syncs. To check: Argo app is <i>Synced/Healthy</i> and the version shows in the app.</td></tr>
+    <tr><td><b>Roll back</b></td><td><code>git revert</code> the bot pin commit (or the change itself) and push. For Petros, the previous <code>v</code> tag identifies the last good image.</td></tr>
+    <tr><td><b>Add a new app to the platform</b></td><td>(1) New repo with Dockerfile and <code>k8s/</code> (kustomize). (2) Pipeline that pins a version in git. (3) Copy <code>ghcr-pull-secret</code> into the namespace. (4) Apply <code>k8s/argocd-application.yaml</code>. (5) Add a Cloudflare route (pattern A or B, §4). (6) Label data PVCs <code>critical-data</code>. (7) Add a hub tile with an in-cluster <code>status_url</code>. (8) Add a NetworkPolicy for its database.</td></tr>
+    <tr><td><b>Add or rotate a secret</b></td><td>Run the matching <code>scripts/seal-*</code> helper (hidden prompt), commit the SealedSecret, let Argo sync, restart the consumer if it reads the secret only at start.</td></tr>
+    <tr><td><b>Restore a database</b></td><td>§9 procedure; rehearse with <code>scripts/restore-test*.ps1</code> first.</td></tr>
+    <tr><td><b>Change Frigate config</b></td><td>Edit the seed in <code>platform/cameras/manifests/frigate.yaml</code> and commit. Check that the live <code>/config/config.yml</code> equals the <i>previous</i> seed, then write the new one and restart Frigate.</td></tr>
+    <tr><td><b>Change Home Assistant packages</b></td><td>Edit the ConfigMap in <code>platform/home-assistant/manifests/home-assistant.yaml</code>. After Argo syncs, restart the HA deployment (the init container copies files on start). Validate with <code>python -m homeassistant --script check_config -c /config</code>.</td></tr>
+    <tr><td><b>Update the Cameras dashboard</b></td><td>Edit <code>scripts/make-cameras-dashboard.py</code>, regenerate, check that the entities exist, paste into the raw configuration editor.</td></tr>
+    <tr><td><b>Re-sign Blink</b></td><td><code>kubectl exec -it -n cameras deploy/blink-bridge -c bridge -- python /app/bridge.py setup</code> (email code; stores the token only).</td></tr>
+    <tr><td><b>Node maintenance</b></td><td>Cordon and drain workers one at a time. Longhorn rebuilds replicas when the node returns. Draining worker-02 stops Home Assistant and Frigate (pinned).</td></tr>
+  </table>
+  <h3>Known gotchas</h3>
+  <ul>
+    <li>Git Bash on Windows rewrites absolute paths in <code>kubectl exec</code> arguments: set <code>MSYS_NO_PATHCONV=1</code>. PowerShell 5.1 drops double quotes from native arguments: pipe SQL through stdin.</li>
+    <li>kustomize paths must be Windows-style when running locally. Argo CD prunes generated ConfigMaps only on apps with <code>prune: true</code>.</li>
+    <li>The Wyze bridge log contains auth material: always filter <code>[AUTH]</code> and "Auth [" lines when reading it.</li>
+  </ul>
+</div>
+
+<!-- 14 DEBT -->
+<div class="section">
+  <h2>14. Known gaps and technical debt</h2>
+  <table>
+    <tr><th style="width:8%">Sev.</th><th style="width:32%">Gap</th><th>Impact and proposed fix</th></tr>
+    <tr><td><span class="tag sev-h">High</span></td><td>No off-site backup copy</td><td>A site-level event (fire, theft) loses the cluster and the backups together. Fix: a second Longhorn backup target (S3-compatible, e.g. Backblaze B2 or Cloudflare R2) for <code>critical-data</code>, encrypted, weekly retention (Phase 7).</td></tr>
+    <tr><td><span class="tag sev-h">High</span></td><td>Single control-plane node with 8 GB on openclaw</td><td>Losing openclaw stops scheduling and the API; memory pressure is chronic. Fix: move to a 3-server embedded-etcd k3s cluster (the workers become servers too), or upgrade openclaw's RAM and reserve system resources.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>Configuration outside git (§8)</td><td>Drift and no review trail. Fix: Terraform for Cloudflare; Argo for the Helm releases (monitoring, Longhorn, Traefik); app-of-apps for the Application objects; Grafana provisioning.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>Inconsistent release strategies; Image Updater write-back <code>argocd</code></td><td>Git doesn't describe what's running for Energia and Godseye. Fix: one reusable release workflow (§16).</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>Petros CI and the QA Lab use the production database</td><td>Tests can mutate production data (the E2E run writes a simulation). Fix: an ephemeral Postgres in CI and a staging Supabase project for the Lab.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>No namespace default-deny NetworkPolicies</td><td>Lateral movement is possible from a compromised app. Fix: default-deny ingress per app namespace, with explicit allows from Traefik and cloudflared.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>Frigate config and HA dashboards are not fully declarative</td><td>Manual steps risk drift. Fix: Frigate config rendered on every start (with a migration check); HA dashboards in YAML mode from a ConfigMap.</td></tr>
+    <tr><td><span class="tag sev-l">Low</span></td><td>Loki has no retention; Grafana data source is manual</td><td>Unbounded growth (slow). Fix: <code>retention_period: 30d</code> and a provisioned data source.</td></tr>
+    <tr><td><span class="tag sev-l">Low</span></td><td>Single replicas, no PDBs</td><td>Brief outages during drains. Acceptable at this scale; add PDBs for Authentik and the hub if they gain replicas.</td></tr>
+    <tr><td><span class="tag sev-l">Low</span></td><td>blinkpy monkeypatch; Blink cloud dependency</td><td>Upgrades can regress. Fix: upstream the <code>readexactly</code> fix; add a bridge smoke test.</td></tr>
+    <tr><td><span class="tag sev-l">Low</span></td><td>Hub tile categories inconsistent (Prometheus and Alertmanager under "Family")</td><td>Cosmetic: audience still restricts access. Fix in Manage.</td></tr>
+  </table>
+</div>
+
+<!-- 15 ROADMAP -->
+<div class="section">
+  <h2>15. Roadmap: remaining phases in detail</h2>
+  <figure>
+    <svg viewBox="0 0 720 90" width="100%" role="img" aria-label="Phase timeline">
+      <g font-size="9" text-anchor="middle">
+        <line x1="20" y1="45" x2="700" y2="45" stroke="#cbd5e1" stroke-width="6"/>
+        <g><circle cx="40" cy="45" r="11" fill="#15803d"/><text x="40" y="49" fill="#fff" font-weight="700">0</text><text x="40" y="74">Foundations</text></g>
+        <g><circle cx="120" cy="45" r="11" fill="#15803d"/><text x="120" y="49" fill="#fff" font-weight="700">1</text><text x="120" y="74">Identity</text></g>
+        <g><circle cx="200" cy="45" r="11" fill="#15803d"/><text x="200" y="49" fill="#fff" font-weight="700">2</text><text x="200" y="74">Portal</text></g>
+        <g><circle cx="280" cy="45" r="11" fill="#15803d"/><text x="280" y="49" fill="#fff" font-weight="700">3</text><text x="280" y="74">Observability</text></g>
+        <g><circle cx="380" cy="45" r="11" fill="#b45309"/><text x="380" y="49" fill="#fff" font-weight="700">4</text><text x="380" y="74">Devices &amp; cameras</text></g>
+        <g><circle cx="480" cy="45" r="11" fill="#2563eb"/><text x="480" y="49" fill="#fff" font-weight="700">6</text><text x="480" y="74">Router storage</text><text x="480" y="22" fill="#2563eb" font-weight="700">recommended next</text></g>
+        <g><circle cx="580" cy="45" r="11" fill="#2563eb"/><text x="580" y="49" fill="#fff" font-weight="700">5</text><text x="580" y="74">Computers</text></g>
+        <g><circle cx="680" cy="45" r="11" fill="#2563eb"/><text x="680" y="49" fill="#fff" font-weight="700">7</text><text x="680" y="74">Hardening</text></g>
+      </g>
+    </svg>
+    <figcaption>Figure 8. Recommended order: Phase 6 before 5, because it unblocks clip retention (Phase 4) and provides staging for off-site backups (Phase 7).</figcaption>
+  </figure>
+
+  <h3>Phase 4 · Devices &amp; cameras <span class="tag st-part">Mostly done</span></h3>
+  <table>
+    <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
+    <tr><td>Wyze Cam Pan</td><td>Both cameras answer TUTK discovery, but the session handshake times out from the bridge; the cause looks to be on the camera or Wyze side. Options: (a) docker-wyze-bridge's WebRTC/KVS cloud path instead of local TUTK; (b) Wyze RTSP firmware where available; (c) replace with RTSP-native cameras. The infrastructure (hostNetwork pod, IOT Wi-Fi leg, nftables allow-list) is kept at <code>replicas: 0</code>.</td><td>Stream stable in Frigate for 24 h; no IOT ports exposed on the primary LAN</td></tr>
+    <tr><td>Important-clip retention</td><td>Use Frigate's export API to write marked clips to an SMB share on the router (needs Phase 6). Triggered from an HA dashboard button (review item → export) or a nightly job for starred events.</td><td>A starred clip is on the router within 5 min and survives Frigate retention</td></tr>
+    <tr><td>Smart devices</td><td>Prefer local-push integrations on the IOT VLAN (Shelly via local MQTT or HTTP; Zigbee/Thread via a USB coordinator on worker-02 if needed). Cloud-only devices last. Each device class gets an HA package in git.</td><td>Each device controllable from HA with no cloud round-trip where possible</td></tr>
+    <tr><td>Declarative HA</td><td>Move dashboards to YAML mode, generated from <code>make-cameras-dashboard.py</code> into the ConfigMap. Keep integrations pinned by SHA-256.</td><td>A fresh HA volume rebuilds the dashboards from git</td></tr>
+    <tr><td>Family rollout</td><td>Authentik invitations for <code>hub-family</code>; Frigate viewer role mapped from groups.</td><td>A family member can view cameras with 2FA and no admin rights</td></tr>
+  </table>
+
+  <h3>Phase 6 · Router storage <span class="tag st-plan">Planned, next</span></h3>
+  <table>
+    <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
+    <tr><td>SMB CSI driver</td><td>Install <code>csi-driver-smb</code> (Argo-managed). StorageClass <code>router-smb</code> pointing at dedicated shares (<code>/clips</code>, <code>/shared</code>), credentials as a SealedSecret, a dedicated SRM user with share-only rights. Keep <code>k8s-storage-folder</code> exclusively for Longhorn backups.</td><td>A PVC on <code>router-smb</code> mounts read-write in a test pod; the backup share stays unreadable to apps</td></tr>
+    <tr><td>File browser</td><td>File Browser (or an equivalent) in its own namespace, behind Authentik ForwardAuth (pattern B), mounting the shared PVC; read-only for <code>hub-family</code>, read-write for admins.</td><td>Upload and download through hub SSO; no anonymous access</td></tr>
+    <tr><td>Drives page in the hub</td><td>Server-side calls to the SRM web API (read-only account, SealedSecret) for volume usage and SMART status, cached for 5 minutes. New <code>src/lib/router.ts</code> plus tests and a <code>/manage/drives</code> page. Prometheus alert rules for usage and SMART failures, via a small exporter or the hub publishing metrics.</td><td>The page shows both 4 TB drives' usage and health; an alert fires at 85%</td></tr>
+    <tr><td>Clip export target</td><td>Frigate exports and the Phase 4 clip job write to <code>/clips</code> with per-year folders and a retention script.</td><td>Clips browsable in the file browser</td></tr>
+  </table>
+  <div class="note warn"><b>Risk</b>The router's CPU and USB-attached drives make a weak primary storage tier. Use SMB for <i>archival</i> and <i>sharing</i>, never for database volumes, which stay on Longhorn.</div>
+
+  <h3>Phase 5 · Computers <span class="tag st-plan">Planned</span></h3>
+  <table>
+    <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
+    <tr><td>Remote access gateway</td><td><b>Apache Guacamole</b> (guacd + web + Postgres) with Authentik OIDC, for clientless RDP, VNC and SSH in the browser. Important: <b>Windows 11 Home cannot host RDP</b>, so Home-edition PCs need a VNC server or the alternative below. <b>MeshCentral</b> (agent-based) works for Home editions and off-LAN machines and adds remote management (power, terminal, files).</td><td>Admin opens a PC desktop from the hub with 2FA; sessions are logged</td></tr>
+    <tr><td>Network path</td><td>Egress NetworkPolicy from the gateway namespace to specific PC addresses and ports only (3389, 5900, 22). Wake-on-LAN from an in-cluster helper.</td><td>The gateway can reach only the listed hosts</td></tr>
+    <tr><td>Off-LAN devices</td><td>Evaluate a mesh VPN (Tailscale, Headscale or WireGuard) versus the router's VPN Plus (stopped, not uninstalled). Prefer identity-bound access over open VPN ports.</td><td>Access without opening inbound ports</td></tr>
+    <tr><td>Audit</td><td>Guacamole session recording to the Phase 6 share; Authentik events to Loki.</td><td>Every session is attributable and replayable</td></tr>
+  </table>
+
+  <h3>Phase 7 · Hardening <span class="tag st-plan">Planned</span></h3>
+  <table>
+    <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
+    <tr><td>Off-site backups</td><td>A second Longhorn backup target (S3-compatible: B2 or R2) with client-side encryption, a separate recurring job (weekly, retain 8) for <code>critical-data</code>, and an alert on overdue off-site copies.</td><td>A restore test from the off-site target passes</td></tr>
+    <tr><td>Control-plane resilience</td><td>Convert to 3 k3s servers with embedded etcd (snapshots to the router and off-site), or at minimum upgrade openclaw's RAM and set <code>--system-reserved</code> / <code>--kube-reserved</code>.</td><td>Losing any one node keeps the API available (if HA)</td></tr>
+    <tr><td>Network segmentation</td><td>Default-deny ingress in every app namespace; explicit allows from <code>traefik</code> and <code>cloudflared</code>; egress policies for namespaces holding secrets.</td><td>Policy tests (e.g. a netshoot pod) show denied lateral traffic</td></tr>
+    <tr><td>Workload hardening</td><td>Pod Security Admission <code>restricted</code> (where vendor images allow) or <code>baseline</code>; non-root and read-only filesystems for all first-party apps.</td><td>No privileged pods outside system namespaces, except documented ones (HA hostNetwork, GPU plugin)</td></tr>
+    <tr><td>TLS everywhere</td><td>cert-manager with a DNS-01 Cloudflare issuer; valid certificates on Traefik; enable TLS verification on the tunnel's pattern-B routes; optionally Cloudflare Access in front of admin hosts.</td><td>No "No TLS Verify" routes remain</td></tr>
+    <tr><td>Secrets lifecycle</td><td>Rotation calendar (Authentik, database passwords, API keys); sealing-key rotation; consider External Secrets with a vault later.</td><td>Every secret has an owner and a rotation date</td></tr>
+    <tr><td>Supply chain</td><td>Renovate, Trivy and Gitleaks in every app repo; cosign signing plus Kyverno verification; SBOMs attached to releases.</td><td>Unsigned images rejected in app namespaces</td></tr>
+    <tr><td>Alert review</td><td>Runbook links on every alert; a monthly synthetic alert; Alertmanager inhibition rules to avoid alert storms.</td><td>Every alert has an owner and a runbook</td></tr>
+  </table>
+</div>
+
+<!-- 16 EVOLUTION -->
+<div class="section">
+  <h2>16. Platform evolution beyond the phases</h2>
+  <h3>16.1 Everything in git</h3>
+  <ul>
+    <li><b>App-of-apps / ApplicationSet:</b> a root Application in this repo generates every app's Application (git generator over a list of repos), removing the hand-applied <code>argocd-application.yaml</code> step.</li>
+    <li><b>Helm releases under Argo:</b> kube-prometheus-stack, Loki, Promtail, Longhorn and Traefik as Argo Helm sources with values files in <code>platform/</code>.</li>
+    <li><b>Cloudflare as code:</b> Terraform (or the cloudflared config-file mode) for tunnel ingress rules and DNS, reviewed in pull requests, so pattern-B routing can be checked automatically.</li>
+  </ul>
+  <h3>16.2 One release workflow for every app</h3>
+  <p>Converge on the Petros model as a <b>reusable workflow</b> in a shared <code>.github</code> repository: SemVer from <code>VERSION</code> plus tags, build once, test inside the image, Trivy gate, push an immutable tag, bot commit the pin plus a git tag, Argo sync. Then retire Image Updater (or switch it to write-back <code>git</code>). Add <b>post-deploy smoke checks</b> (Argo PostSync hook jobs that hit <code>/health</code> and assert the version) and <b>automatic rollback</b> on failure.</p>
+  <h3>16.3 Environments and test data</h3>
+  <ul>
+    <li><b>Ephemeral CI databases</b> (service containers) for Petros and others; seed scripts instead of production data.</li>
+    <li>A <b>staging namespace</b> per app (<code>&lt;app&gt;-staging</code>) deployed from a <code>staging</code> branch, reachable only on the LAN or through Authentik. Promotion = merge to <code>main</code>.</li>
+    <li>QA Lab pattern (registry + background runner + live progress) generalized as a <b>shared test-harness service</b> for the business apps.</li>
+  </ul>
+  <h3>16.4 Observability maturity</h3>
+  <ul>
+    <li>App metrics (OpenTelemetry SDK → Prometheus) for request rate, errors and latency; SLOs for the hub and CRM with burn-rate alerts.</li>
+    <li>Distributed tracing (Tempo) once there are service-to-service calls (the broker agent, MLflow).</li>
+    <li>A hub "Platform status" page backed by Prometheus queries instead of ad-hoc probes.</li>
+  </ul>
+  <h3>16.5 AI and ML workloads</h3>
+  <ul>
+    <li><b>MLflow</b> for Petros: tracking server (Postgres backend, artifacts on GCS or the Phase 6 share), Authentik-protected UI, Petros training runs logging parameters, metrics and model artifacts; the model registry replaces ad-hoc <code>agent_models</code> versioning.</li>
+    <li><b>Energy-broker agent</b> (RFP → contract): a new app on the standard template, using the CRM's data through an API (not shared database access), human-in-the-loop approval, and audit logging consistent with the hub.</li>
+    <li>GPU capacity is limited to the Intel iGPUs (used by Frigate). Training-heavy work should stay on cloud GPUs, with only inference and tracking running here.</li>
+  </ul>
+  <h3>16.6 Hub product features</h3>
+  <ul>
+    <li>Ingress / Service auto-discovery (proposed tiles from LoadBalancer Services and tunnel routes), drag-and-drop ordering, per-user favourites.</li>
+    <li>Family self-service: invite flow from the hub through the Authentik API (admins only), a device and camera summary widget, a Phase 6 drives widget.</li>
+  </ul>
+</div>
+
+<!-- APPENDIX A -->
+<div class="section">
+  <h2>Appendix A · Version inventory <small>(read from the cluster, Nov 9 2026)</small></h2>
+  <table>
+    <tr><th>Component</th><th>Version</th><th>Component</th><th>Version</th></tr>
+    <tr><td>k3s / Kubernetes</td><td>v1.34.6+k3s1</td><td>Argo CD</td><td>v3.3.8</td></tr>
+    <tr><td>Calico</td><td>v3.31.2</td><td>Argo CD Image Updater</td><td>v1.1.1</td></tr>
+    <tr><td>MetalLB</td><td>v0.14.8</td><td>Sealed Secrets (chart)</td><td>2.22.0</td></tr>
+    <tr><td>Traefik (chart)</td><td>v3.7.9 (41.1.1)</td><td>Authentik</td><td>2026.8.5</td></tr>
+    <tr><td>Longhorn</td><td>v1.11.1</td><td>cloudflared</td><td>2026.10.3</td></tr>
+    <tr><td>kube-prometheus-stack</td><td>88.6.3</td><td>Prometheus</td><td>v3.14.0</td></tr>
+    <tr><td>Alertmanager</td><td>v0.34.0</td><td>Loki (chart)</td><td>3.6 (7.3.0)</td></tr>
+    <tr><td>Promtail (chart)</td><td>3.5.1 (6.17.1)</td><td>Hub: Next.js / React</td><td>16.4.5 / 19.3.0</td></tr>
+    <tr><td>Hub: next-auth</td><td>4.24.x</td><td>Hub image</td><td>0.1.0.18 (node:22-alpine)</td></tr>
+    <tr><td>Hub / Authentik Postgres</td><td>17.11</td><td>Energia Postgres</td><td>16 (alpine)</td></tr>
+    <tr><td>Investco Postgres</td><td>17 (alpine)</td><td>Petros AI</td><td>2.4.4</td></tr>
+    <tr><td>Home Assistant</td><td>2026.10.4</td><td>Frigate</td><td>0.18.2</td></tr>
+    <tr><td>Frigate HA integration</td><td>5.15.6</td><td>Browser Mod</td><td>3.4.0</td></tr>
+    <tr><td>Mosquitto</td><td>2.0.22</td><td>Neolink</td><td>v0.6.2 (digest-pinned)</td></tr>
+    <tr><td>go2rtc (bridge / Frigate)</td><td>1.9.14 / 1.9.14</td><td>blinkpy</td><td>0.25.9 (patched recv)</td></tr>
+    <tr><td>wyze-bridge</td><td>2.10.3 (scaled to 0)</td><td>Trivy (CI)</td><td>0.76.1</td></tr>
+  </table>
+</div>
+
+<!-- APPENDIX B -->
+<div class="section">
+  <h2>Appendix B · Namespaces, workloads and ports</h2>
+  <table>
+    <tr><th style="width:15%">Namespace</th><th style="width:38%">Workloads</th><th>Exposure</th></tr>
+    <tr><td>hub</td><td>home-lab-hub (Deployment), hub-postgres (StatefulSet)</td><td>Tunnel → Service; LAN Ingress (nip.io)</td></tr>
+    <tr><td>authentik</td><td>server, worker, embedded outpost, authentik-postgresql</td><td>Tunnel (auth.); outpost reached by Traefik in-cluster</td></tr>
+    <tr><td>default</td><td>energia, energia-postgres, petros-ai-engine, cloudflared, petros-export (CronJob)</td><td>LB .241 / .240; tunnel crm. / ai.</td></tr>
+    <tr><td>investco</td><td>investco, investco-postgres, CronJobs (schwab-sync, levels-snapshot, screener-build)</td><td>Tunnel (investco.)</td></tr>
+    <tr><td>godseye · pdf-edit · energia-web</td><td>App deployments (godseye-auth / -cache volumes)</td><td>Tunnel; LB .244 / .242</td></tr>
+    <tr><td>cameras</td><td>frigate, neolink, blink-bridge (bridge + go2rtc), wyze-bridge (0), intel-gpu-plugin</td><td>Frigate 8971 via Traefik ForwardAuth; RTSP 8554 cluster-internal (policies)</td></tr>
+    <tr><td>home-assistant</td><td>home-assistant (hostNetwork, worker-02), mosquitto</td><td>Tunnel (home.); MQTT 1883 internal</td></tr>
+    <tr><td>monitoring</td><td>Prometheus, Alertmanager, Grafana, Loki, Promtail, exporters</td><td>Grafana tunnel; Prom / AM via ForwardAuth</td></tr>
+    <tr><td>longhorn-system</td><td>Longhorn manager, engines, UI; recurring jobs</td><td>UI via ForwardAuth + step-up flow</td></tr>
+    <tr><td>argocd</td><td>Argo CD, Image Updater</td><td>LAN only (Traefik .243, nip.io)</td></tr>
+    <tr><td>traefik · metallb-system · calico-system · kube-system</td><td>Platform controllers, Sealed Secrets</td><td>Traefik LB .243</td></tr>
+  </table>
+  <p class="small">Source of this document: <code>docs/architecture.html</code> in the home-lab-hub repository. The plain-language companion guide is <code>docs/how-it-works.html</code>.</p>
+</div>
+
+</body>
+</html>
