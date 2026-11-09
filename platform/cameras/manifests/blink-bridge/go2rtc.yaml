@@ -15,8 +15,6 @@ streams:
   front_door: ffmpeg:tcp://127.0.0.1:18001#video=copy#audio=aac
   front_porch: ffmpeg:tcp://127.0.0.1:18002#video=copy#audio=aac
   parking_lot: ffmpeg:tcp://127.0.0.1:18003#video=copy#audio=aac
-# Keep reading the wired Parking Lot all the time, so a player that connects (Frigate, after a
-# restart or a gap) is answered at once; go2rtc allows only 5 s to describe a stream. The bridge
-# preloads battery cameras through the API only while their session runs.
-preload:
-  parking_lot: "video&audio"
+# Preloads (keeping go2rtc reading a camera so players connect at once) are set by the
+# bridge through the API: go2rtc starts before the bridge listens, and a preload that fails
+# at startup is never retried.

@@ -200,8 +200,8 @@ class Bridge:
     async def preload(self, camera: Camera, on: bool) -> None:
         """Keeps go2rtc (in this pod) reading a battery camera while its session runs, so a player
         that reconnects mid-session (Frigate, after a gap in the video) gets an answer at once
-        instead of waiting more than go2rtc's fixed 5 s for the stream to be described. The
-        wired camera is preloaded in go2rtc.yaml."""
+        instead of waiting more than go2rtc's fixed 5 s for the stream to be described. Wired
+        cameras are preloaded all the time (keep_preloads)."""
         if self.http is None:
             return
         url = f"{GO2RTC_API}/api/preload"
@@ -602,6 +602,22 @@ class Bridge:
             if running and not camera.viewers and camera.state != "waiting" and camera.unwatched is None:
                 camera.unwatched = asyncio.create_task(self.stop_if_unwatched(camera))
 
+    async def keep_preloads(self) -> None:
+        """Wired cameras stay preloaded in go2rtc. Set here rather than in go2rtc.yaml: go2rtc
+        starts before this bridge is listening, and a preload that fails at its start is never
+        retried. Checked every minute in case go2rtc restarted."""
+        while True:
+            try:
+                async with self.http.get(f"{GO2RTC_API}/api/preload") as response:
+                    current = await response.json(content_type=None) or {}
+            except Exception:
+                current = {}
+            for camera in self.cameras.values():
+                if camera.wired and camera.key not in current:
+                    log.info("%s: preloading in go2rtc", camera.key)
+                    await self.preload(camera, True)
+            await asyncio.sleep(60)
+
     async def run(self) -> None:
         async with ClientSession() as session:
             self.http = session
@@ -612,7 +628,7 @@ class Bridge:
                     lambda r, w, c=camera: self.serve(c, r, w), "127.0.0.1", camera.port
                 )
                 log.info("%s (%s, %s) on port %d", camera.key, camera.name, "wired" if camera.wired else "battery", camera.port)
-            await asyncio.gather(mqtt, self.keep_token())
+            await asyncio.gather(mqtt, self.keep_token(), self.keep_preloads())
 
 
 def main() -> None:
