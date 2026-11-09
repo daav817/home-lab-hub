@@ -87,6 +87,7 @@ MQTT_HOST = os.environ.get("MQTT_HOST", "mosquitto.home-assistant.svc.cluster.lo
 MQTT_USER = os.environ.get("MQTT_USER", "blink")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "")
 DISCOVERY = "homeassistant"
+GO2RTC_API = "http://127.0.0.1:1984"  # go2rtc in this pod (local only)
 TOPIC = "blink"
 
 # 188-byte MPEG-TS null packet (PID 0x1FFF). Players ignore it; it keeps the connection busy.
@@ -174,6 +175,7 @@ class Bridge:
         self.blink: Blink | None = None
         self.mqtt: aiomqtt.Client | None = None
         self.saved_token = None
+        self.http: ClientSession | None = None
 
     # --- MQTT and Home Assistant ---------------------------------------------------------
 
@@ -186,7 +188,30 @@ class Bridge:
         if camera.state != state:
             camera.state = state
             log.info("%s: %s", camera.key, state)
+            if not camera.wired and state in ("live", "idle"):
+                asyncio.create_task(self.preload(camera, state == "live"))
         await self.publish(f"{TOPIC}/{camera.key}/state", state)
+
+    async def preload(self, camera: Camera, on: bool) -> None:
+        """Keeps go2rtc (in this pod) reading a battery camera while its session runs, so a player
+        that reconnects mid-session (Frigate, after a gap in the video) gets an answer at once
+        instead of waiting more than go2rtc's fixed 5 s for the stream to be described. The
+        wired camera is preloaded in go2rtc.yaml."""
+        if self.http is None:
+            return
+        url = f"{GO2RTC_API}/api/preload"
+        try:
+            if on:
+                # go2rtc also tries to save the preload in its (read-only) config file, which
+                # fails with 500 after the preload itself has started: that's expected.
+                async with self.http.put(url, params={"src": camera.key, "video": "", "audio": ""}) as response:
+                    if response.status not in (200, 500):
+                        log.warning("%s: go2rtc preload failed (%d)", camera.key, response.status)
+            else:
+                async with self.http.delete(url, params={"src": camera.key}):
+                    pass
+        except Exception as error:
+            log.warning("%s: go2rtc preload %s failed: %s", camera.key, "on" if on else "off", error)
 
     async def announce(self) -> None:
         """Home Assistant discovery for each camera's controls."""
@@ -570,6 +595,7 @@ class Bridge:
 
     async def run(self) -> None:
         async with ClientSession() as session:
+            self.http = session
             mqtt = asyncio.create_task(self.mqtt_loop())
             await self.sign_in(session)
             for camera in self.cameras.values():
