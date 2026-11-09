@@ -18,5 +18,6 @@ spec:
   syncPolicy:
     automated:
       selfHeal: true
+      prune: true  # removes old generated blink-bridge-code ConfigMaps
     syncOptions:
       - CreateNamespace=true
