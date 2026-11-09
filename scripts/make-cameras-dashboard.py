@@ -77,10 +77,11 @@ def blink(cam, title, live):
                    "style": {**ROUND, "bottom": "4%", "right": "4%"}},
               ]}
     return [
-        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": "live"},
-                                               {"condition": "state", "entity": state, "state_not": "starting"}],
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state,
+                                                "state_not": ["live", "starting", "slow"]}],
          "card": snapshot},
-        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": "starting"}],
+        # "slow": video is arriving, but too little to show yet (weak link to Blink).
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": ["starting", "slow"]}],
          "card": waking},
         {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": "live"}],
          "card": live_card},

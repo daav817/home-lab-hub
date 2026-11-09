@@ -80,6 +80,11 @@ TOKEN_FILE = os.environ.get("BLINK_TOKEN_FILE", "/data/blink.json")
 CONTINUE_WAIT = int(os.environ.get("CONTINUE_WAIT", "60"))
 PREWARM_WAIT = int(os.environ.get("PREWARM_WAIT", "30"))
 WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "25"))
+# "live" only once this much video has arrived: a camera on a weak link (the doorbell) can send
+# a few bytes and then almost nothing, and players shown that fail with errors. Until then the
+# state stays "starting", or "slow" if video is trickling in for longer than SLOW_AFTER seconds.
+LIVE_BYTES = int(os.environ.get("LIVE_BYTES", str(150 * 1024)))
+SLOW_AFTER = int(os.environ.get("SLOW_AFTER", "15"))
 # A player (Frigate) that drops and reconnects within this many seconds keeps the session.
 PLAYER_GRACE = int(os.environ.get("PLAYER_GRACE", "20"))
 BUFFER_LIMIT = 8 * 1024 * 1024
@@ -441,11 +446,15 @@ class Bridge:
                     if chunk:
                         if first_data is None:
                             first_data = time.monotonic()
-                            await self.set_state(camera, "live")
                         received += len(chunk)
+                        if camera.state != "live" and received >= LIVE_BYTES:
+                            await self.set_state(camera, "live")
                         if not camera.attached and len(camera.buffer) < BUFFER_LIMIT:
                             camera.buffer.extend(chunk)
                         self.send(camera, chunk)
+                    if (first_data is not None and camera.state == "starting"
+                            and time.monotonic() - first_data > SLOW_AFTER):
+                        await self.set_state(camera, "slow")  # video trickling in: weak link
                     if first_data is None and time.monotonic() - opened > WAKE_TIMEOUT:
                         reason = f"no video within {WAKE_TIMEOUT} s of asking Blink"
                         log.warning("%s: %s", camera.key, reason)
