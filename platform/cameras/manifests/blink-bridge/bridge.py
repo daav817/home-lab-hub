@@ -12,9 +12,13 @@ How a live view starts:
   session. Battery cameras only start from the button; a player can join a running session.
 
 When Blink ends a session:
-- wired cameras reconnect straight away while anyone is watching;
+- wired cameras reconnect while anyone is watching (waiting longer after short sessions);
 - battery cameras go to "waiting" and wait up to CONTINUE_WAIT seconds for "Continue". Players
   are kept connected with MPEG-TS null packets meanwhile. Without an answer the view ends.
+
+A player that drops and reconnects within PLAYER_GRACE seconds keeps the session. Blink allows
+one live view per Sync Module, so a wired camera steps aside while a battery camera on the same
+module is live, and resumes afterwards.
 
 The bridge also offers the wired camera's light and night vision setting as Home Assistant
 controls (the battery cameras refused both). Two-way talk isn't supported by the Blink library.
@@ -44,6 +48,8 @@ TOKEN_FILE = os.environ.get("BLINK_TOKEN_FILE", "/data/blink.json")
 CONTINUE_WAIT = int(os.environ.get("CONTINUE_WAIT", "60"))
 PREWARM_WAIT = int(os.environ.get("PREWARM_WAIT", "30"))
 WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "25"))
+# A player (Frigate) that drops and reconnects within this many seconds keeps the session.
+PLAYER_GRACE = int(os.environ.get("PLAYER_GRACE", "20"))
 BUFFER_LIMIT = 8 * 1024 * 1024
 MQTT_HOST = os.environ.get("MQTT_HOST", "mosquitto.home-assistant.svc.cluster.local")
 MQTT_USER = os.environ.get("MQTT_USER", "blink")
@@ -75,6 +81,12 @@ class Camera:
     attached: bool = False  # a player has connected during this run
     task: asyncio.Task | None = None
     from_motion: bool = False  # started by a Blink motion event: no Continue prompt
+    stop_reason: str = ""  # why the session was told to end, for the log
+    backoff: float = 2  # wired cameras: wait before the next session (grows if Blink refuses)
+    next_start: float = 0.0  # monotonic time the next session may start
+    unwatched: asyncio.Task | None = None  # pending stop after the last player left
+    in_session: bool = False  # battery camera: has (or is about to take) its Sync Module's live view
+    streaming: bool = False  # a Blink live session is open
 
 
 def parse_cameras() -> list[Camera]:
@@ -196,9 +208,12 @@ class Bridge:
                 camera.from_motion = from_motion
             elif not from_motion:
                 camera.from_motion = False  # someone is watching: offer Continue as usual
+                if camera.state == "waiting":
+                    camera.continue_event.set()  # Start while waiting means Continue
             self.ensure_running(camera)
         elif command == "stop":
             log.info("%s: stop requested", camera.key)
+            camera.stop_reason = "Stop pressed"
             camera.stop_event.set()
         elif command == "continue":
             log.info("%s: continue requested", camera.key)
@@ -296,6 +311,7 @@ class Bridge:
     def ensure_running(self, camera: Camera) -> None:
         if camera.task is None or camera.task.done():
             camera.stop_event.clear()
+            camera.stop_reason = ""
             camera.attached = False
             camera.buffer.clear()
             camera.task = asyncio.create_task(self.run_camera(camera))
@@ -304,26 +320,60 @@ class Bridge:
         for queue in list(camera.viewers):
             queue.put_nowait(chunk)
 
-    async def one_session(self, camera: Camera) -> int:
+    def network(self, camera: Camera) -> str | None:
+        blink_camera = self.blink.cameras.get(camera.name) if self.blink else None
+        return getattr(blink_camera, "network_id", None)
+
+    def battery_on_same_module(self, camera: Camera) -> Camera | None:
+        """A battery camera that wants the Sync Module this camera is on. Blink gives each Sync
+        Module one live view at a time, so the wired camera steps aside for it."""
+        network = self.network(camera)
+        for other in self.cameras.values():
+            if other is not camera and not other.wired and other.in_session and self.network(other) == network:
+                return other
+        return None
+
+    async def wait_for_module(self, camera: Camera) -> None:
+        """Battery camera: waits (up to 20 s) for a wired camera on the same Sync Module to let go."""
+        network = self.network(camera)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and any(
+            other.streaming for other in self.cameras.values() if other is not camera and self.network(other) == network
+        ):
+            await asyncio.sleep(0.5)
+
+    async def one_session(self, camera: Camera) -> tuple[int, str]:
         """Streams one Blink session to the viewers, keeping it in the buffer until a player
-        has connected. Returns the bytes received."""
+        has connected. Returns the bytes received and why it ended."""
         stream = await self.blink.cameras[camera.name].init_livestream()
         await stream.start("127.0.0.1", 0)
+        camera.streaming = True
         feed = asyncio.create_task(stream.feed())
         received = 0
         first_data = None
         opened = time.monotonic()
+        reason = ""
         try:
             host, port = stream.socket.getsockname()[:2]
             reader, local = await asyncio.open_connection(host, port)
             try:
-                while not camera.stop_event.is_set() and not camera.pause_event.is_set():
+                while not reason:
+                    if camera.stop_event.is_set():
+                        reason = camera.stop_reason or "stopped"
+                        break
+                    if camera.pause_event.is_set():
+                        reason = "paused to change the light"
+                        break
+                    if camera.wired and (other := self.battery_on_same_module(camera)):
+                        reason = f"stepping aside for {other.key} (same Sync Module)"
+                        break
                     try:
-                        chunk = await asyncio.wait_for(reader.read(65536), timeout=5)
+                        chunk = await asyncio.wait_for(reader.read(65536), timeout=1)
                     except TimeoutError:
                         chunk = None
                     if chunk == b"":
-                        break  # Blink ended the session
+                        reason = "Blink ended the stream"
+                        break
                     if chunk:
                         if first_data is None:
                             first_data = time.monotonic()
@@ -333,11 +383,12 @@ class Bridge:
                             camera.buffer.extend(chunk)
                         self.send(camera, chunk)
                     if first_data is None and time.monotonic() - opened > WAKE_TIMEOUT:
-                        log.warning("%s: no video within %d s of asking Blink", camera.key, WAKE_TIMEOUT)
-                        break
+                        reason = f"no video within {WAKE_TIMEOUT} s of asking Blink"
+                        log.warning("%s: %s", camera.key, reason)
                     # Started from Home Assistant but no player came: give up.
-                    if not camera.attached and time.monotonic() - (first_data or time.monotonic()) > PREWARM_WAIT:
-                        log.info("%s: no player connected within %d s", camera.key, PREWARM_WAIT)
+                    elif not camera.attached and time.monotonic() - (first_data or time.monotonic()) > PREWARM_WAIT:
+                        reason = f"no player connected within {PREWARM_WAIT} s"
+                        camera.stop_reason = reason
                         camera.stop_event.set()
             finally:
                 local.close()
@@ -346,7 +397,8 @@ class Bridge:
             feed.cancel()
             with contextlib.suppress(BaseException):
                 await feed
-        return received
+            camera.streaming = False
+        return received, reason
 
     async def wait_to_continue(self, camera: Camera) -> bool:
         """Waits the full window for Continue, even if the player disconnects meanwhile (the live
@@ -364,33 +416,73 @@ class Bridge:
                 await asyncio.wait_for(camera.continue_event.wait(), timeout=1)
         return camera.continue_event.is_set() and not camera.stop_event.is_set()
 
+    async def wait_for_turn(self, camera: Camera) -> bool:
+        """Wired camera: waits out the gap after a short session and any battery camera using
+        the same Sync Module. False if the view was stopped meanwhile."""
+        announced = False
+        while not camera.stop_event.is_set():
+            other = self.battery_on_same_module(camera)
+            if other is None and time.monotonic() >= camera.next_start:
+                return True
+            if other and not announced:
+                log.info("%s: waiting for %s to finish (same Sync Module)", camera.key, other.key)
+                announced = True
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(camera.stop_event.wait(), timeout=1)
+        return False
+
     async def run_camera(self, camera: Camera) -> None:
-        backoff = 2
         try:
             while not camera.stop_event.is_set():
                 camera.continue_event.clear()  # a press during this session continues it
                 await self.set_state(camera, "starting")
+                if camera.wired and not await self.wait_for_turn(camera):
+                    break
+                # A player already connected (or reconnecting later) gets the stream from the
+                # start of this session.
+                camera.buffer.clear()
+                camera.attached = bool(camera.viewers)
                 started = time.monotonic()
+                reason = "failed"
+                camera.in_session = not camera.wired
                 try:
-                    received = await self.one_session(camera)
-                    log.info("%s: session ended after %.0f s, %d KB", camera.key, time.monotonic() - started, received // 1024)
+                    if not camera.wired:
+                        await self.wait_for_module(camera)
+                    received, reason = await self.one_session(camera)
+                    log.info("%s: session ended after %.0f s, %d KB: %s",
+                             camera.key, time.monotonic() - started, received // 1024, reason)
                 except Exception:
                     log.exception("%s: session failed", camera.key)
+                finally:
+                    camera.in_session = False
                 if camera.stop_event.is_set():
                     break
                 if camera.wired:
-                    if not camera.viewers:
-                        break
-                    # Short sessions in a row mean Blink is refusing; slow down.
-                    backoff = 2 if time.monotonic() - started > 60 else min(backoff * 2, 300)
-                    await asyncio.sleep(backoff)
+                    # Short sessions in a row mean Blink is refusing; slow down. Stepping aside or
+                    # pausing for the light isn't Blink refusing.
+                    if reason.startswith(("stepping aside", "paused")) or time.monotonic() - started > 60:
+                        camera.backoff = 2
+                    else:
+                        camera.backoff = min(camera.backoff * 2, 60)
+                    camera.next_start = time.monotonic() + camera.backoff
                 elif camera.from_motion or not await self.wait_to_continue(camera):
                     break
         finally:
+            if camera.stop_reason:
+                log.info("%s: view ended: %s", camera.key, camera.stop_reason)
             for queue in list(camera.viewers):
                 queue.put_nowait(None)  # tells each player connection to close
             camera.buffer.clear()
             await self.set_state(camera, "idle")
+
+    async def stop_if_unwatched(self, camera: Camera) -> None:
+        """Ends the view once nobody has been watching for PLAYER_GRACE seconds. A player that
+        drops and comes back sooner (Frigate reconnecting) keeps the same session."""
+        await asyncio.sleep(PLAYER_GRACE)
+        camera.unwatched = None
+        if not camera.viewers and camera.state != "waiting":
+            camera.stop_reason = f"no player for {PLAYER_GRACE} s"
+            camera.stop_event.set()
 
     async def serve(self, camera: Camera, client: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """One player connection from go2rtc. Gets the stream so far, then the live data."""
@@ -404,11 +496,15 @@ class Bridge:
             return
         # Start the session first: starting one resets the buffer and the attached flag.
         self.ensure_running(camera)
+        if camera.unwatched:
+            camera.unwatched.cancel()
+            camera.unwatched = None
         queue: asyncio.Queue = asyncio.Queue()
         if camera.buffer:
             queue.put_nowait(bytes(camera.buffer))
         camera.viewers.add(queue)
         camera.attached = True
+        log.info("%s: player connected (%d watching)", camera.key, len(camera.viewers))
 
         async def watch() -> None:
             with contextlib.suppress(Exception):
@@ -428,8 +524,10 @@ class Bridge:
             camera.viewers.discard(queue)
             with contextlib.suppress(Exception):
                 writer.close()
-            if not camera.viewers and camera.state != "waiting":
-                camera.stop_event.set()  # last player left
+            log.info("%s: player left (%d watching)", camera.key, len(camera.viewers))
+            running = camera.task is not None and not camera.task.done()
+            if running and not camera.viewers and camera.state != "waiting" and camera.unwatched is None:
+                camera.unwatched = asyncio.create_task(self.stop_if_unwatched(camera))
 
     async def run(self) -> None:
         async with ClientSession() as session:
