@@ -167,13 +167,16 @@ data:
         # Blink Parking Lot (wired), through the Blink bridge. Its live view goes through
         # Blink's cloud, about 160 kbit/s while live.
         parking_lot_live:
-          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/parking_lot
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/parking_lot#timeout=30
         # Blink battery cameras. The bridge refuses these unless a live session is running
         # (Start in Home Assistant, or Blink motion), so Frigate never wakes them itself.
+        # The doorbell's link to Blink is weak: its video arrives in bursts with gaps of 5 s
+        # or more. #timeout=30 makes go2rtc wait out a gap instead of dropping the stream
+        # after its default 5 s.
         front_door_live:
-          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_door
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_door#timeout=30
         front_porch_live:
-          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_porch
+          - rtsp://blink-bridge.cameras.svc.cluster.local:8554/front_porch#timeout=30
 
     cameras:
       garage:
@@ -196,7 +199,8 @@ data:
         ffmpeg:
           inputs:
             - path: rtsp://127.0.0.1:8554/parking_lot_live
-              input_args: preset-rtsp-restream
+              # preset-rtsp-restream, but waiting 30 s (not 10) through gaps in Blink video
+              input_args: -rtsp_transport tcp -timeout 30000000
               roles:
                 - detect
                 - record
@@ -204,7 +208,8 @@ data:
         ffmpeg:
           inputs:
             - path: rtsp://127.0.0.1:8554/front_door_live
-              input_args: preset-rtsp-restream
+              # preset-rtsp-restream, but waiting 30 s (not 10) through gaps in Blink video
+              input_args: -rtsp_transport tcp -timeout 30000000
               roles:
                 - detect
                 - record
@@ -212,7 +217,8 @@ data:
         ffmpeg:
           inputs:
             - path: rtsp://127.0.0.1:8554/front_porch_live
-              input_args: preset-rtsp-restream
+              # preset-rtsp-restream, but waiting 30 s (not 10) through gaps in Blink video
+              input_args: -rtsp_transport tcp -timeout 30000000
               roles:
                 - detect
                 - record
