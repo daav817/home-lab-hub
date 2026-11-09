@@ -22,6 +22,7 @@ def reolink(cam, title, preset_icon, preset_name):
                          arrow("down", "mdi:arrow-down"), arrow("right", "mdi:arrow-right"), preset]}
 
 SPINNER = "/local/camera-loading.svg"  # from the Home Assistant config (home-assistant.yaml)
+CLEAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E"  # transparent
 # Round, dark backing so controls on top of the video are easy to see.
 ROUND = {"transform": "none", "color": "white", "background": "rgba(0,0,0,0.6)", "border-radius": "50%",
          "padding": "8px", "--mdc-icon-size": "30px"}
@@ -92,7 +93,12 @@ def live_only(cam, title, device):
     seconds while Blink changes it), night vision, and full screen."""
     return {"type": "picture-elements", "camera_image": f"camera.{cam}", "camera_view": "live",
             "elements": [
-                label(f"sensor.{device}_live_view", f"{title} · ", {"bottom": "4%", "left": "4%"}),
+                # Invisible layer over the whole picture (first, so the buttons sit on top):
+                # tapping the video opens it large, like the other camera cards.
+                {"type": "image", "image": CLEAR, "entity": f"camera.{cam}",
+                 "tap_action": {"action": "more-info"}, "hold_action": {"action": "none"},
+                 "style": {"top": "50%", "left": "50%", "width": "100%", "height": "100%"}},
+                label(f"sensor.{device}_live_view", f"{title} · ", {"top": "4%", "left": "4%"}),
                 {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen",
                  "tap_action": {"action": "more-info", "entity": f"camera.{cam}"},
                  "style": {**ROUND, "top": "4%", "right": "4%"}},
