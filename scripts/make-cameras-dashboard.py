@@ -21,16 +21,23 @@ def reolink(cam, title, preset_icon, preset_name):
             "entities": [arrow("left", "mdi:arrow-left"), arrow("up", "mdi:arrow-up"),
                          arrow("down", "mdi:arrow-down"), arrow("right", "mdi:arrow-right"), preset]}
 
+SPINNER = "/local/camera-loading.svg"  # from the Home Assistant config (home-assistant.yaml)
+# Round, dark backing so controls on top of the video are easy to see.
+ROUND = {"transform": "none", "color": "white", "background": "rgba(0,0,0,0.6)", "border-radius": "50%",
+         "padding": "8px", "--mdc-icon-size": "30px"}
+
+
+def label(entity, prefix, place):
+    """Text on the picture: the prefix, then the entity's state."""
+    return {"type": "state-label", "entity": entity, "prefix": prefix,
+            "style": {"transform": "none", "color": "white", "background": "rgba(0,0,0,0.6)",
+                      "padding": "4px 10px", "border-radius": "12px", "font-size": "14px", **place}}
+
+
 def press(entity, icon, name):
     return {"entity": entity, "icon": icon, "name": name,
             "tap_action": {"action": "perform-action", "perform_action": "button.press",
                            "target": {"entity_id": entity}}}
-
-
-def controls(device):
-    """Light switch (tap toggles) and night vision selector (tap to choose)."""
-    return [{"entity": f"switch.{device}_light", "name": "Light"},
-            {"entity": f"select.{device}_night_vision", "name": "Night vision", "tap_action": {"action": "more-info"}}]
 
 
 def blink(cam, title, live):
@@ -59,29 +66,50 @@ def blink(cam, title, live):
                      press(f"button.{device}_stop_live_view", "mdi:stop", "Stop live view"),
                      press(f"button.{device}_continue_live_view", "mdi:play-pause", "Continue"),
                  ]}
+    # While Blink wakes the camera (5-25 s): the snapshot with a spinner over it.
+    waking = {"type": "picture-elements", "camera_image": f"camera.{cam}", "camera_view": "auto",
+              "elements": [
+                  {"type": "image", "image": SPINNER, "style": {"top": "45%", "left": "50%", "width": "22%"}},
+                  label(state, f"{title}: ", {"bottom": "4%", "left": "4%"}),
+                  {"type": "icon", "icon": "mdi:stop", "title": "Stop",
+                   "tap_action": press(f"button.{device}_stop_live_view", "mdi:stop", "Stop")["tap_action"],
+                   "style": {**ROUND, "bottom": "4%", "right": "4%"}},
+              ]}
     return [
-        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": "live"}],
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state_not": "live"},
+                                               {"condition": "state", "entity": state, "state_not": "starting"}],
          "card": snapshot},
+        {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": "starting"}],
+         "card": waking},
         {"type": "conditional", "conditions": [{"condition": "state", "entity": state, "state": "live"}],
          "card": live_card},
     ]
 
 
 def live_only(cam, title, device):
-    """A camera that's always live through Frigate, like the wired Blink Parking Lot."""
-    return {"type": "picture-glance", "title": title, "camera_image": f"camera.{cam}", "camera_view": "live",
-            "entities": [{"entity": f"camera.{cam}", "icon": "mdi:cctv"}, *controls(device)]}
+    """A camera that's always live through Frigate, like the wired Blink Parking Lot, with its
+    controls on the picture: a big light button (tap to switch; the live view pauses a few
+    seconds while Blink changes it), night vision, and full screen."""
+    return {"type": "picture-elements", "camera_image": f"camera.{cam}", "camera_view": "live",
+            "elements": [
+                label(f"sensor.{device}_live_view", f"{title} · ", {"bottom": "4%", "left": "4%"}),
+                {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen",
+                 "tap_action": {"action": "more-info", "entity": f"camera.{cam}"},
+                 "style": {**ROUND, "top": "4%", "right": "4%"}},
+                {"type": "state-icon", "entity": f"select.{device}_night_vision", "title": "Night vision",
+                 "tap_action": {"action": "more-info"},
+                 "style": {**ROUND, "bottom": "4%", "right": "25%"}},
+                {"type": "state-icon", "entity": f"switch.{device}_light", "title": "Parking Lot light",
+                 "tap_action": {"action": "toggle"},
+                 "style": {**ROUND, "--mdc-icon-size": "46px", "bottom": "15%", "right": "4%"}},
+                label(f"switch.{device}_light", "Light: ", {"bottom": "4%", "right": "4%"}),
+            ]}
 
 
 garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
 tiles = [garage, basement,
          live_only("parking_lot_live", "Parking Lot", "parking_lot_live_view"),
-         # A big button for the light: tap to switch it on or off (the live view pauses for a
-         # few seconds while Blink changes it). Night vision is the small moon icon on the tile.
-         {"type": "button", "entity": "switch.parking_lot_live_view_light", "name": "Parking Lot light",
-          "icon": "mdi:spotlight-beam", "show_state": True, "icon_height": "80px",
-          "tap_action": {"action": "toggle"}},
          # Live video comes through Frigate (camera.<name>_live), the same route as the Reolinks.
          *blink("front_door", "Front Door", live="front_door_live"),
          *blink("front_porch_and_swings", "Front Porch", live="front_porch_live")]

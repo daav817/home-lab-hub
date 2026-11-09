@@ -29,6 +29,19 @@ data:
     script: !include scripts.yaml
     scene: !include scenes.yaml
 
+  # Copied to /config/www/ (served as /local/camera-loading.svg): the spinner the Cameras
+  # dashboard shows over a Blink camera while it wakes up.
+  camera-loading.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+      <circle cx="60" cy="60" r="56" fill="#000" fill-opacity="0.55"/>
+      <circle cx="60" cy="60" r="34" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="9"/>
+      <circle cx="60" cy="60" r="34" fill="none" stroke="#03a9f4" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="60 154">
+        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60"
+                          dur="1s" repeatCount="indefinite"/>
+      </circle>
+    </svg>
+
   # Copied to /config/packages/ on every start.
   blink_live.yaml: |
     # When a battery Blink camera's live session ends, the Blink bridge waits 60 seconds for
@@ -135,6 +148,8 @@ spec:
               cp /seed/configuration.yaml /config/configuration.yaml
               mkdir -p /config/packages
               cp /seed/blink_live.yaml /config/packages/blink_live.yaml
+              mkdir -p /config/www
+              cp /seed/camera-loading.svg /config/www/camera-loading.svg
               [ -f /config/automations.yaml ] || echo '[]' > /config/automations.yaml
               [ -f /config/scenes.yaml ] || echo '[]' > /config/scenes.yaml
               [ -f /config/scripts.yaml ] || echo '{}' > /config/scripts.yaml
