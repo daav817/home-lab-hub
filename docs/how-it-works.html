@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home Lab Hub — How It Works</title>
+<style>
+  @page { size: Letter; margin: 0.7in 0.75in 0.75in 0.75in; }
+  :root {
+    --ink: #1d2433; --muted: #5b6475; --line: #d9dee8; --soft: #f4f6fa;
+    --blue: #2563eb; --teal: #0f8b8d; --amber: #b45309; --violet: #6d28d9; --green: #15803d; --red: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Inter, Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; margin: 0; }
+  h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 8pt; letter-spacing: -0.5pt; }
+  h2 { font-size: 17pt; margin: 0 0 6pt; padding-bottom: 4pt; border-bottom: 2px solid var(--ink); break-after: avoid; }
+  h3 { font-size: 12.5pt; margin: 14pt 0 4pt; break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  .section { break-before: page; }
+  .lead { font-size: 12pt; color: var(--muted); }
+  .cover { height: 9.3in; display: flex; flex-direction: column; justify-content: space-between; }
+  .cover .band { background: var(--ink); color: white; padding: 34pt 30pt; border-radius: 10pt; }
+  .cover .band p { color: #c9d2e3; font-size: 13pt; margin: 0; }
+  .kicker { text-transform: uppercase; letter-spacing: 2pt; font-size: 9pt; color: #9fb0cf; margin-bottom: 10pt; }
+  .toc { columns: 2; column-gap: 24pt; font-size: 10.5pt; padding: 0; list-style: none; }
+  .toc li { padding: 3pt 0; border-bottom: 1px dotted var(--line); break-inside: avoid; }
+  .toc b { color: var(--blue); margin-right: 6pt; }
+  .callout { background: var(--soft); border-left: 4px solid var(--blue); padding: 8pt 12pt; margin: 8pt 0 10pt; border-radius: 0 6pt 6pt 0; break-inside: avoid; }
+  .callout.amber { border-color: var(--amber); }
+  .callout.green { border-color: var(--green); }
+  .callout b:first-child { display: block; margin-bottom: 2pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 9.5pt; }
+  th { text-align: left; background: var(--ink); color: white; padding: 5pt 7pt; font-weight: 600; }
+  td { padding: 5pt 7pt; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  tr:nth-child(even) td { background: #fafbfd; }
+  .tech { display: grid; grid-template-columns: 1fr 1fr; gap: 9pt; margin: 6pt 0 8pt; }
+  .card { border: 1px solid var(--line); border-radius: 8pt; padding: 9pt 11pt; break-inside: avoid; }
+  .card h4 { margin: 0 0 2pt; font-size: 11pt; display: flex; justify-content: space-between; gap: 6pt; }
+  .card h4 span { font-size: 8pt; font-weight: 600; color: white; border-radius: 10pt; padding: 1pt 7pt; white-space: nowrap; align-self: center; }
+  .card p { margin: 3pt 0 0; font-size: 9.5pt; }
+  .card .like { color: var(--muted); font-style: italic; }
+  .t-blue span { background: var(--blue); } .t-teal span { background: var(--teal); } .t-amber span { background: var(--amber); }
+  .t-violet span { background: var(--violet); } .t-green span { background: var(--green); } .t-red span { background: var(--red); }
+  figure { margin: 8pt 0 12pt; break-inside: avoid; }
+  figcaption { font-size: 9pt; color: var(--muted); margin-top: 4pt; text-align: center; }
+  svg text { font-family: "Segoe UI", Arial, sans-serif; }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 6pt 0 10pt; }
+  ol.steps li { counter-increment: s; position: relative; padding: 4pt 0 4pt 28pt; break-inside: avoid; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 4pt; width: 19pt; height: 19pt; border-radius: 50%; background: var(--blue); color: white; font-weight: 700; font-size: 9pt; display: flex; align-items: center; justify-content: center; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; }
+  .small { font-size: 9pt; color: var(--muted); }
+  .pill { display: inline-block; font-size: 8.5pt; padding: 0 6pt; border-radius: 8pt; background: var(--soft); border: 1px solid var(--line); }
+  dl { margin: 0; columns: 2; column-gap: 22pt; }
+  dt { font-weight: 700; break-after: avoid; }
+  dd { margin: 0 0 6pt; font-size: 9.5pt; break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div>
+    <div class="band">
+      <div class="kicker">Energia Power · Home Lab</div>
+      <h1>Home Lab Hub<br>How It Works</h1>
+      <p>A plain-language guide to the technology behind the hub: what each piece does, how the pieces work together, and why each one matters.</p>
+    </div>
+    <h3 style="margin-top:24pt">What's inside</h3>
+    <ol class="toc">
+      <li><b>1</b>The big picture in one page</li>
+      <li><b>2</b>The physical equipment</li>
+      <li><b>3</b>The apps people actually use</li>
+      <li><b>4</b>The foundation: running many apps on three computers</li>
+      <li><b>5</b>Getting in safely from the internet</li>
+      <li><b>6</b>Sign-in and who can see what</li>
+      <li><b>7</b>From a code change to a live app</li>
+      <li><b>8</b>Keeping data safe: storage and backups</li>
+      <li><b>9</b>Watching over everything: monitoring and alerts</li>
+      <li><b>10</b>Cameras and the smart home</li>
+      <li><b>11</b>Four everyday stories, start to finish</li>
+      <li><b>12</b>Why each piece matters (summary table)</li>
+      <li><b>13</b>What's next</li>
+      <li><b>14</b>Glossary</li>
+    </ol>
+  </div>
+  <p class="small">Prepared November 9, 2026. It describes the system as it runs today: the hub, its apps, the three-computer cluster and the home network. Passwords, keys and private addresses are deliberately left out.</p>
+</div>
+
+<!-- 1. BIG PICTURE -->
+<div class="section">
+  <h2>1. The big picture in one page</h2>
+  <p class="lead">Home Lab Hub is a private "front door" to a family business's software and to the house's cameras and smart devices. Sign in once at <b>hub.energiapower.llc</b> and you see a page of tiles, one per app, each with a green or red light that shows whether it's working.</p>
+  <figure>
+    <svg viewBox="0 0 720 300" width="100%" role="img" aria-label="How a visitor reaches an app">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2433"/></marker></defs>
+      <rect x="6" y="110" width="110" height="70" rx="10" fill="#eef2ff" stroke="#2563eb"/>
+      <text x="61" y="140" text-anchor="middle" font-size="13" font-weight="700">You</text>
+      <text x="61" y="158" text-anchor="middle" font-size="10">phone or laptop,</text>
+      <text x="61" y="171" text-anchor="middle" font-size="10">anywhere</text>
+      <rect x="150" y="110" width="120" height="70" rx="10" fill="#fff7ed" stroke="#b45309"/>
+      <text x="210" y="138" text-anchor="middle" font-size="13" font-weight="700">Cloudflare</text>
+      <text x="210" y="156" text-anchor="middle" font-size="10">padlock (HTTPS)</text>
+      <text x="210" y="169" text-anchor="middle" font-size="10">+ private tunnel</text>
+      <rect x="300" y="20" width="412" height="270" rx="14" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="5 4"/>
+      <text x="314" y="40" font-size="11" fill="#5b6475" font-weight="700">INSIDE THE HOUSE: the cluster (3 computers)</text>
+      <rect x="318" y="110" width="104" height="70" rx="10" fill="#ecfeff" stroke="#0f8b8d"/>
+      <text x="370" y="140" text-anchor="middle" font-size="13" font-weight="700">Traefik</text>
+      <text x="370" y="158" text-anchor="middle" font-size="10">front desk:</text>
+      <text x="370" y="171" text-anchor="middle" font-size="10">which app?</text>
+      <rect x="450" y="56" width="120" height="58" rx="10" fill="#f5f3ff" stroke="#6d28d9"/>
+      <text x="510" y="81" text-anchor="middle" font-size="12" font-weight="700">Authentik</text>
+      <text x="510" y="98" text-anchor="middle" font-size="10">ID check + phone code</text>
+      <rect x="450" y="138" width="250" height="134" rx="10" fill="#f0fdf4" stroke="#15803d"/>
+      <text x="575" y="158" text-anchor="middle" font-size="12" font-weight="700">The apps</text>
+      <text x="462" y="180" font-size="10">Hub portal · CRM · Investco · Petros AI</text>
+      <text x="462" y="197" font-size="10">PDF Edit · Godseye · Energia Website</text>
+      <text x="462" y="214" font-size="10">Home Assistant · Frigate cameras</text>
+      <text x="462" y="231" font-size="10">Grafana · Prometheus · Longhorn …</text>
+      <text x="462" y="256" font-size="9.5" fill="#5b6475">data kept on Longhorn → nightly to router</text>
+      <rect x="592" y="56" width="108" height="58" rx="10" fill="#fef2f2" stroke="#b91c1c"/>
+      <text x="646" y="81" text-anchor="middle" font-size="12" font-weight="700">Watchers</text>
+      <text x="646" y="98" text-anchor="middle" font-size="10">monitoring + alerts</text>
+      <line x1="116" y1="145" x2="148" y2="145" stroke="#1d2433" stroke-width="1.6" marker-end="url(#a)"/>
+      <line x1="270" y1="145" x2="316" y2="145" stroke="#1d2433" stroke-width="1.6" marker-end="url(#a)"/>
+      <line x1="422" y1="133" x2="448" y2="96" stroke="#1d2433" stroke-width="1.6" marker-end="url(#a)"/>
+      <line x1="422" y1="158" x2="448" y2="190" stroke="#1d2433" stroke-width="1.6" marker-end="url(#a)"/>
+      <text x="370" y="204" text-anchor="middle" font-size="9.5" fill="#5b6475">some apps check</text>
+      <text x="370" y="217" text-anchor="middle" font-size="9.5" fill="#5b6475">ID first; others</text>
+      <text x="370" y="230" text-anchor="middle" font-size="9.5" fill="#5b6475">have their own login</text>
+    </svg>
+    <figcaption>Figure 1. A visitor never connects to the house directly: everything comes in through Cloudflare's tunnel, then the front desk (Traefik) and, for protected apps, the ID check (Authentik).</figcaption>
+  </figure>
+  <p>Behind that simple page is a small, professional-grade setup that runs at home instead of in a paid cloud. The easiest way to picture it is an <b>apartment building</b>:</p>
+  <table>
+    <tr><th style="width:30%">In the building…</th><th>In Home Lab Hub…</th></tr>
+    <tr><td>The land and the building</td><td>Three small computers in the house, joined into one "cluster", plus the home router with two 4&nbsp;TB drives</td></tr>
+    <tr><td>The building manager</td><td><b>Kubernetes (k3s)</b>: decides which computer runs each app, and restarts an app if it crashes</td></tr>
+    <tr><td>The apartments</td><td>The apps: CRM, Investco, Petros AI, Home Assistant and the rest</td></tr>
+    <tr><td>A private, guarded entrance from the street</td><td><b>Cloudflare Tunnel</b>: the only way in from the internet. No door on the house is left open.</td></tr>
+    <tr><td>The front desk that sends visitors to the right apartment</td><td><b>Traefik</b>: routes each web address to the right app</td></tr>
+    <tr><td>The security office that issues ID badges</td><td><b>Authentik</b>: sign-in with a password plus a phone code</td></tr>
+    <tr><td>The lobby directory</td><td><b>The hub portal</b> itself: the page of tiles</td></tr>
+    <tr><td>Blueprints, and a foreman who keeps the building matching them</td><td><b>GitHub</b> holds every setting as text; <b>Argo CD</b> keeps the cluster matching it</td></tr>
+    <tr><td>Storage units and an off-site vault</td><td><b>Longhorn</b> keeps app data on the cluster; nightly <b>backups</b> go to the router's drives</td></tr>
+    <tr><td>Smoke detectors and the alarm company</td><td><b>Prometheus, Grafana, Loki and Alertmanager</b> watch everything and email when something's wrong</td></tr>
+    <tr><td>Doorbells, cameras and the light switches</td><td><b>Home Assistant</b> and <b>Frigate</b> for cameras, lights and sensors</td></tr>
+  </table>
+</div>
+
+<!-- 2. EQUIPMENT -->
+<div class="section">
+  <h2>2. The physical equipment</h2>
+  <p>Everything runs on a handful of devices in the house. No monthly cloud-server bill is involved, apart from small services such as email delivery and the domain name.</p>
+  <table>
+    <tr><th style="width:26%">Device</th><th style="width:30%">What it is</th><th>Its job</th></tr>
+    <tr><td><b>openclaw</b></td><td>Small PC (Intel i5, 8&nbsp;GB memory)</td><td>The cluster's "control plane": the computer the building manager works from. It also runs a few light apps.</td></tr>
+    <tr><td><b>worker-01</b> and <b>worker-02</b></td><td>Small PCs (Intel i7, 16&nbsp;GB memory, built-in Intel graphics)</td><td>Do most of the work. The graphics chip on worker-02 runs the camera AI (spotting people and cars). worker-02 also has a carefully fenced connection to the smart-device Wi-Fi.</td></tr>
+    <tr><td><b>Synology RT2600ac router</b></td><td>The home router, with two 4&nbsp;TB drives attached</td><td>Connects the house to the internet. Keeps three separate networks (family, guests, smart devices) and stores the nightly backups.</td></tr>
+    <tr><td><b>Cameras</b></td><td>2 Reolink, 3 Blink (plus 6 not yet installed), 2 Wyze</td><td>Watch the garage, basement, parking lot, front door and porch. The Wyze Cam Pans aren't connected yet.</td></tr>
+  </table>
+  <div class="callout">
+    <b>Why three computers instead of one?</b>
+    If one computer fails or needs a restart, the building manager moves its apps to the others, and each app's data is already copied onto more than one machine. One big computer would be a single point of failure.
+  </div>
+  <h3>Three separate home networks</h3>
+  <p>The router keeps the <b>family network</b>, the <b>guest network</b> and a <b>smart-device network</b> (cameras, plugs and similar) walled off from each other. Cheap smart devices are a common way in for attackers, so they live on their own network and can't reach the family's computers. The one deliberate exception, a connection from worker-02 for the Wyze cameras, has its own firewall that only accepts traffic from those two cameras.</p>
+</div>
+
+<!-- 3. APPS -->
+<div class="section">
+  <h2>3. The apps people actually use</h2>
+  <p>These are the tiles on the hub today. <b>Audience</b> is who can see the tile: <span class="pill">family</span> means the family group and admins; <span class="pill">admin</span> means administrators only. The hub hides tiles a person isn't allowed to see.</p>
+  <table>
+    <tr><th style="width:18%">App</th><th style="width:12%">Audience</th><th>What it's for</th><th style="width:25%">Sign-in</th></tr>
+    <tr><td><b>CRM</b> (Energia)</td><td>family</td><td>The business's customer records, contracts, quotes, emails and tasks. Its data lives in its own database in the cluster, backed up nightly.</td><td>Own login</td></tr>
+    <tr><td><b>PDF Edit</b></td><td>family</td><td>Edit and sign PDF documents.</td><td>Own login</td></tr>
+    <tr><td><b>Investco</b></td><td>family</td><td>Investment tracking. Pulls market data from outside services such as Schwab and Massive.</td><td>Own login</td></tr>
+    <tr><td><b>Godseye</b></td><td>family</td><td>A business analysis app.</td><td>Own login</td></tr>
+    <tr><td><b>Petros AI</b></td><td>family</td><td>A supply-chain "digital twin": a simulated business where AI agents learn to make buying and shipping decisions. It includes a QA Lab where admins can run its automated tests.</td><td>Own login</td></tr>
+    <tr><td><b>Energia Website</b></td><td>family</td><td>The public business website.</td><td>Public</td></tr>
+    <tr><td><b>Home Assistant</b></td><td>family</td><td>The smart-home control panel: all cameras on one page, the parking lot light, alerts.</td><td>Own login + phone code</td></tr>
+    <tr><td><b>Frigate</b></td><td>family</td><td>The camera recorder with AI that spots people and cars.</td><td>Authentik</td></tr>
+    <tr><td><b>Argo CD</b></td><td>admin</td><td>Shows what's deployed and whether it matches the blueprints. Home network only.</td><td>Own login</td></tr>
+    <tr><td><b>Grafana</b></td><td>admin</td><td>Charts of the cluster's health, and the logs.</td><td>Own login</td></tr>
+    <tr><td><b>Prometheus</b></td><td>admin</td><td>The raw health measurements behind those charts.</td><td>Authentik</td></tr>
+    <tr><td><b>Alertmanager</b></td><td>admin</td><td>Sends the "something's wrong" emails.</td><td>Authentik</td></tr>
+    <tr><td><b>Authentik</b></td><td>admin</td><td>Manages users, groups, invites and sign-in rules.</td><td>Itself</td></tr>
+    <tr><td><b>Longhorn</b></td><td>admin</td><td>Storage, restores and deleting backups. Asks for a fresh phone code every time.</td><td>Authentik + fresh code</td></tr>
+  </table>
+  <p class="small">The hub also has admin-only pages: <b>Manage</b> to add or edit tiles (every change is recorded in an audit log), <b>Health</b> for each computer's load and each app's status, and <b>Backups</b> for when each app's data was last saved, with a "Back up now" button.</p>
+</div>
+
+<!-- 4. FOUNDATION -->
+<div class="section">
+  <h2>4. The foundation: running many apps on three computers</h2>
+  <p>Each app is packaged as a <b>container</b>: a sealed box holding the app and everything it needs to run, so it behaves the same on any computer. Think of a shipping container: the crane doesn't care what's inside.</p>
+  <div class="tech">
+    <div class="card t-blue"><h4>Kubernetes (k3s) <span>building manager</span></h4>
+      <p>Spreads the containers across the three computers, restarts any that crash, and replaces one when a new version arrives. k3s is a lightweight edition suited to small computers.</p>
+      <p class="like">Like a building manager who keeps every apartment occupied and fixes anything broken.</p></div>
+    <div class="card t-blue"><h4>Calico <span>internal roads</span></h4>
+      <p>The private network that lets apps talk to each other inside the cluster. It also enforces <b>network rules</b>, such as "only the CRM may talk to the CRM's database".</p>
+      <p class="like">Like hallways with locked doors between wings.</p></div>
+    <div class="card t-teal"><h4>MetalLB <span>street addresses</span></h4>
+      <p>Gives some apps a fixed address on the home network, so devices in the house can find them.</p>
+      <p class="like">Like assigning unit numbers.</p></div>
+    <div class="card t-teal"><h4>Traefik <span>front desk</span></h4>
+      <p>Receives every web visit and sends it to the right app by name, for example "frigate…" to the camera app. It can ask Authentik to check ID first.</p>
+      <p class="like">Like a receptionist directing visitors.</p></div>
+    <div class="card t-green"><h4>Docker images on GitHub (GHCR) <span>warehouse</span></h4>
+      <p>Finished app packages (container images) are stored in GitHub's container registry, each labelled with its version, for example Petros 2.4.4.</p>
+      <p class="like">Like a warehouse of prefabricated apartments, each with a model number.</p></div>
+    <div class="card t-green"><h4>PostgreSQL <span>filing cabinets</span></h4>
+      <p>The database most apps use: the hub, CRM, Investco and Authentik each have their own. Petros uses a hosted one (Supabase), with a nightly copy kept at home.</p>
+      <p class="like">Like each business keeping its own locked filing cabinet.</p></div>
+  </div>
+  <div class="callout green">
+    <b>Why it matters</b>
+    Without Kubernetes, someone would have to start every app by hand, notice crashes and restart them, and rebuild everything after a computer failure. With it, the cluster heals itself: a crashed app is back in seconds, usually before anyone notices.
+  </div>
+</div>
+
+<!-- 5. ENTRY -->
+<div class="section">
+  <h2>5. Getting in safely from the internet</h2>
+  <p>Most home setups "open a port" on the router so the internet can reach a computer inside. That's like leaving a side door unlocked. Home Lab Hub doesn't do this.</p>
+  <div class="tech">
+    <div class="card t-amber"><h4>Cloudflare <span>guarded entrance</span></h4>
+      <p>Owns the public face of every address ending in <b>energiapower.llc</b>. It provides the padlock (HTTPS encryption), blocks obvious attacks, and hides the house's real internet address.</p></div>
+    <div class="card t-amber"><h4>Cloudflare Tunnel <span>private corridor</span></h4>
+      <p>A small program inside the cluster dials <i>out</i> to Cloudflare and keeps that line open. Visitors' traffic comes back down this line, so the router never has to accept connections from strangers.</p></div>
+  </div>
+  <p>Each public address (hub, crm, ai, home, frigate…) is a "route" in the Cloudflare dashboard that says which app inside should receive it. Admin-only tools such as Argo CD have no public route at all, so they can only be reached from inside the house.</p>
+  <div class="callout amber">
+    <b>Why it matters</b>
+    The router has no open doors, and the house's address isn't published. An attacker scanning the internet finds nothing to knock on. Everything they could reach goes through Cloudflare first, then through a login.
+  </div>
+</div>
+
+<!-- 6. IDENTITY -->
+<div class="section">
+  <h2>6. Sign-in and who can see what</h2>
+  <div class="tech">
+    <div class="card t-violet"><h4>Authentik <span>ID office</span></h4>
+      <p>The central sign-in service at <b>auth.energiapower.llc</b>. It checks a password <i>and</i> a 6-digit code from a phone app (two-factor sign-in). It decides which <b>groups</b> a person belongs to: administrators, <b>hub-family</b> (all family apps), or <b>hub-limited</b> (fewer apps). New people join by invitation only.</p></div>
+    <div class="card t-violet"><h4>Single sign-on <span>one badge, many doors</span></h4>
+      <p>Signing in to the hub also signs you in to the protected tools (Frigate, Prometheus, Alertmanager, Longhorn) without typing your password again. The most dangerous tool, Longhorn, which can delete backups, asks for a fresh phone code every time anyway.</p></div>
+  </div>
+  <h3>Two kinds of apps</h3>
+  <div class="two">
+    <div class="callout"><b>Protected by Authentik</b>Frigate, Prometheus, Alertmanager and Longhorn have no login of their own. Traefik asks Authentik "is this person allowed?" before letting anyone near them.</div>
+    <div class="callout"><b>Their own login</b>CRM, Investco, Petros, PDF Edit, Godseye, Grafana and Home Assistant already have proper logins (and the phone app for Home Assistant). The hub simply links to them, to avoid signing in twice.</div>
+  </div>
+  <div class="callout green">
+    <b>Why it matters</b>
+    A stolen password alone isn't enough to get in, because the phone code is also needed. Each family member sees only the tiles meant for them. And there is one place to remove someone's access, instead of a dozen separate accounts.
+  </div>
+</div>
+
+<!-- 7. CODE TO LIVE -->
+<div class="section">
+  <h2>7. From a code change to a live app</h2>
+  <p>Every app and every setting is written down as text in <b>GitHub</b> (the "blueprints"). Nobody changes the live system by hand. They change the blueprint, and machines do the rest. This is called <b>GitOps</b>.</p>
+  <figure>
+    <svg viewBox="0 0 720 210" width="100%" role="img" aria-label="Release pipeline">
+      <defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2433"/></marker></defs>
+      <g font-size="10">
+        <rect x="4" y="60" width="118" height="84" rx="10" fill="#eef2ff" stroke="#2563eb"/>
+        <text x="63" y="86" text-anchor="middle" font-size="12" font-weight="700">1 · Change</text>
+        <text x="63" y="104" text-anchor="middle">code saved</text><text x="63" y="118" text-anchor="middle">to GitHub</text>
+        <rect x="148" y="60" width="130" height="84" rx="10" fill="#fff7ed" stroke="#b45309"/>
+        <text x="213" y="86" text-anchor="middle" font-size="12" font-weight="700">2 · Test &amp; build</text>
+        <text x="213" y="104" text-anchor="middle">GitHub Actions runs</text><text x="213" y="118" text-anchor="middle">all tests, builds the</text><text x="213" y="132" text-anchor="middle">package</text>
+        <rect x="304" y="60" width="130" height="84" rx="10" fill="#f0fdf4" stroke="#15803d"/>
+        <text x="369" y="86" text-anchor="middle" font-size="12" font-weight="700">3 · Label</text>
+        <text x="369" y="104" text-anchor="middle">package stored as</text><text x="369" y="118" text-anchor="middle">e.g. Petros 2.4.4</text><text x="369" y="132" text-anchor="middle">(GHCR warehouse)</text>
+        <rect x="460" y="60" width="118" height="84" rx="10" fill="#f5f3ff" stroke="#6d28d9"/>
+        <text x="519" y="86" text-anchor="middle" font-size="12" font-weight="700">4 · Record</text>
+        <text x="519" y="104" text-anchor="middle">blueprint updated</text><text x="519" y="118" text-anchor="middle">to "use 2.4.4"</text>
+        <rect x="604" y="60" width="112" height="84" rx="10" fill="#ecfeff" stroke="#0f8b8d"/>
+        <text x="660" y="86" text-anchor="middle" font-size="12" font-weight="700">5 · Deploy</text>
+        <text x="660" y="104" text-anchor="middle">Argo CD sees it,</text><text x="660" y="118" text-anchor="middle">swaps in the new</text><text x="660" y="132" text-anchor="middle">version</text>
+        <line x1="122" y1="102" x2="146" y2="102" stroke="#1d2433" stroke-width="1.6" marker-end="url(#b)"/>
+        <line x1="278" y1="102" x2="302" y2="102" stroke="#1d2433" stroke-width="1.6" marker-end="url(#b)"/>
+        <line x1="434" y1="102" x2="458" y2="102" stroke="#1d2433" stroke-width="1.6" marker-end="url(#b)"/>
+        <line x1="578" y1="102" x2="602" y2="102" stroke="#1d2433" stroke-width="1.6" marker-end="url(#b)"/>
+        <text x="213" y="172" text-anchor="middle" fill="#b91c1c" font-weight="700">A failed test stops here:</text>
+        <text x="213" y="186" text-anchor="middle" fill="#b91c1c">the live app is untouched</text>
+        <text x="360" y="30" text-anchor="middle" fill="#5b6475">Fully automatic after step 1, usually 5–10 minutes</text>
+      </g>
+    </svg>
+    <figcaption>Figure 2. The Petros release line. Each passing change gets the next version number (2.4.1, 2.4.2 …), which shows on its login page.</figcaption>
+  </figure>
+  <div class="tech">
+    <div class="card t-green"><h4>GitHub <span>blueprints</span></h4><p>Keeps every version of every file, so any change can be seen, explained, and undone.</p></div>
+    <div class="card t-amber"><h4>GitHub Actions <span>quality gate</span></h4><p>Runs each app's automated tests on every change. For Petros these are 15 simulation-engine checks plus browser tests driven by <b>Playwright</b>, a robot that clicks through the site like a person.</p></div>
+    <div class="card t-teal"><h4>Argo CD <span>foreman</span></h4><p>Constantly compares the cluster with the blueprints. If someone changes something by hand, it puts it back; if the blueprint changes, it applies it.</p></div>
+    <div class="card t-violet"><h4>Sealed Secrets <span>locked envelopes</span></h4><p>Passwords can't be stored in plain text on GitHub. They are sealed with a key that only the cluster has, so the blueprints can be shared safely.</p></div>
+    <div class="card t-blue"><h4>Renovate <span>update reminders</span></h4><p>Watches for new versions of the building blocks and suggests updates to the hub, so security fixes aren't missed.</p></div>
+    <div class="card t-red"><h4>Security scanners <span>inspectors</span></h4><p>Trivy (known weaknesses in packages), Gitleaks (passwords accidentally saved) and Semgrep (risky code patterns) check the hub's code before it ships.</p></div>
+  </div>
+  <div class="callout green"><b>Why it matters</b>Changes are tested before they go live, every change is recorded and can be reversed, and the whole system could be rebuilt from the blueprints if the hardware were lost.</div>
+</div>
+
+<!-- 8. STORAGE & BACKUPS -->
+<div class="section">
+  <h2>8. Keeping data safe: storage and backups</h2>
+  <p>Apps come and go, but their data (customer records, contracts, settings, camera recordings) has to survive.</p>
+  <figure>
+    <svg viewBox="0 0 720 190" width="100%" role="img" aria-label="Backup flow">
+      <defs><marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2433"/></marker></defs>
+      <g font-size="10">
+        <rect x="6" y="30" width="170" height="130" rx="10" fill="#f0fdf4" stroke="#15803d"/>
+        <text x="91" y="54" text-anchor="middle" font-size="12" font-weight="700">App data (Longhorn)</text>
+        <text x="91" y="74" text-anchor="middle">each volume copied onto</text><text x="91" y="88" text-anchor="middle">more than one computer</text>
+        <text x="91" y="108" text-anchor="middle" fill="#5b6475">CRM · hub · Authentik</text><text x="91" y="121" text-anchor="middle" fill="#5b6475">Investco · Godseye</text><text x="91" y="134" text-anchor="middle" fill="#5b6475">Petros export · Grafana</text><text x="91" y="147" text-anchor="middle" fill="#5b6475">Home Assistant · Frigate settings</text>
+        <rect x="236" y="30" width="200" height="56" rx="10" fill="#eef2ff" stroke="#2563eb"/>
+        <text x="336" y="53" text-anchor="middle" font-size="12" font-weight="700">Snapshots (2:00 AM daily)</text>
+        <text x="336" y="71" text-anchor="middle">quick "undo points", kept 7 days</text>
+        <rect x="236" y="104" width="200" height="56" rx="10" fill="#fff7ed" stroke="#b45309"/>
+        <text x="336" y="127" text-anchor="middle" font-size="12" font-weight="700">Backups (3:30 AM nightly)</text>
+        <text x="336" y="145" text-anchor="middle">full copy, kept 14 nights</text>
+        <rect x="496" y="104" width="218" height="56" rx="10" fill="#f8fafc" stroke="#1d2433"/>
+        <text x="605" y="127" text-anchor="middle" font-size="12" font-weight="700">Router's 4 TB drives</text>
+        <text x="605" y="145" text-anchor="middle">outside the cluster</text>
+        <line x1="176" y1="70" x2="234" y2="58" stroke="#1d2433" stroke-width="1.6" marker-end="url(#c)"/>
+        <line x1="176" y1="120" x2="234" y2="132" stroke="#1d2433" stroke-width="1.6" marker-end="url(#c)"/>
+        <line x1="436" y1="132" x2="494" y2="132" stroke="#1d2433" stroke-width="1.6" marker-end="url(#c)"/>
+        <text x="605" y="60" text-anchor="middle" fill="#15803d" font-weight="700">Restore tests prove the</text>
+        <text x="605" y="74" text-anchor="middle" fill="#15803d" font-weight="700">copies actually work</text>
+      </g>
+    </svg>
+    <figcaption>Figure 3. Two layers of protection: quick undo points on the cluster, and a nightly copy on separate hardware.</figcaption>
+  </figure>
+  <div class="tech">
+    <div class="card t-green"><h4>Longhorn <span>storage units</span></h4><p>Gives each app a "volume" (its disk) and keeps copies of it on more than one computer, so a failed computer loses nothing. It also takes the snapshots and backups.</p></div>
+    <div class="card t-amber"><h4>Nightly backups <span>off-site vault</span></h4><p>Every night at 3:30 the important volumes are copied to the router's drives. The hub's Backups page shows when each app was last saved, and an email alert goes out if a backup fails or is overdue.</p></div>
+    <div class="card t-blue"><h4>Petros nightly export <span>copy of a cloud app</span></h4><p>Petros keeps its database with a hosted service (Supabase) and its trained AI models with Google Cloud. Every night a job copies both to a volume at home, which then goes into the backups as well.</p></div>
+    <div class="card t-violet"><h4>Restore tests <span>fire drills</span></h4><p>A backup is only useful if it restores. Scripts restore the newest backup into a separate test area and compare it with the live data. The CRM test on Nov 9 brought back all 45 tables; the only differences were rows added since 3:30 that morning.</p></div>
+  </div>
+  <div class="callout amber"><b>Still to do</b>Today every backup sits in the house. A fire or theft could take the computers and the router together, so an off-site copy (another location or cloud storage) is planned for the hardening phase.</div>
+</div>
+
+<!-- 9. MONITORING -->
+<div class="section">
+  <h2>9. Watching over everything: monitoring and alerts</h2>
+  <div class="tech">
+    <div class="card t-red"><h4>Prometheus <span>sensors</span></h4><p>Every few seconds, records measurements from every computer and app: memory, disk space, whether each app is running, whether backups succeeded.</p></div>
+    <div class="card t-red"><h4>Alertmanager <span>alarm company</span></h4><p>When a measurement crosses a line (disk nearly full, an app down, a backup overdue), it sends an email.</p></div>
+    <div class="card t-blue"><h4>Grafana <span>dashboard</span></h4><p>Turns the measurements into charts, for example memory use per computer over the last week.</p></div>
+    <div class="card t-blue"><h4>Loki <span>diary</span></h4><p>Collects every app's log messages in one place, searchable from Grafana. This is how problems like "why did the camera stop?" get diagnosed.</p></div>
+  </div>
+  <p>The hub's own <b>status lights</b> and <b>Health</b> page give the everyday view: green if an app answers, red if it doesn't, plus each computer's load. Prometheus and Grafana are for digging deeper.</p>
+  <div class="callout green"><b>Why it matters</b>Problems get noticed by a machine, often before a person would. And when something does break, the logs and measurements show what happened instead of leaving people to guess.</div>
+</div>
+
+<!-- 10. CAMERAS -->
+<div class="section">
+  <h2>10. Cameras and the smart home</h2>
+  <p>Cameras from three brands each work differently. The goal is one place to see them all, recordings when something happens, and alerts that matter.</p>
+  <figure>
+    <svg viewBox="0 0 720 250" width="100%" role="img" aria-label="Camera flow">
+      <defs><marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2433"/></marker></defs>
+      <g font-size="10">
+        <rect x="4" y="20" width="132" height="58" rx="10" fill="#eef2ff" stroke="#2563eb"/>
+        <text x="70" y="44" text-anchor="middle" font-size="11.5" font-weight="700">Reolink cameras</text><text x="70" y="61" text-anchor="middle">garage, basement</text>
+        <rect x="4" y="96" width="132" height="58" rx="10" fill="#eef2ff" stroke="#2563eb"/>
+        <text x="70" y="120" text-anchor="middle" font-size="11.5" font-weight="700">Blink cameras</text><text x="70" y="137" text-anchor="middle">parking lot, door, porch</text>
+        <rect x="160" y="20" width="120" height="58" rx="10" fill="#ecfeff" stroke="#0f8b8d"/>
+        <text x="220" y="44" text-anchor="middle" font-size="11.5" font-weight="700">Neolink</text><text x="220" y="61" text-anchor="middle">translator</text>
+        <rect x="160" y="96" width="120" height="58" rx="10" fill="#ecfeff" stroke="#0f8b8d"/>
+        <text x="220" y="116" text-anchor="middle" font-size="11.5" font-weight="700">Blink bridge</text><text x="220" y="132" text-anchor="middle">via Blink's cloud;</text><text x="220" y="145" text-anchor="middle">custom-built</text>
+        <rect x="306" y="50" width="140" height="80" rx="10" fill="#f0fdf4" stroke="#15803d"/>
+        <text x="376" y="76" text-anchor="middle" font-size="12" font-weight="700">Frigate</text><text x="376" y="94" text-anchor="middle">records + AI spots</text><text x="376" y="108" text-anchor="middle">people &amp; cars</text><text x="376" y="122" text-anchor="middle" fill="#5b6475">(on worker-02's graphics chip)</text>
+        <rect x="306" y="168" width="140" height="54" rx="10" fill="#fff7ed" stroke="#b45309"/>
+        <text x="376" y="191" text-anchor="middle" font-size="11.5" font-weight="700">Mosquitto (MQTT)</text><text x="376" y="208" text-anchor="middle">message board</text>
+        <rect x="472" y="50" width="130" height="80" rx="10" fill="#f5f3ff" stroke="#6d28d9"/>
+        <text x="537" y="76" text-anchor="middle" font-size="12" font-weight="700">Home Assistant</text><text x="537" y="94" text-anchor="middle">one dashboard,</text><text x="537" y="108" text-anchor="middle">buttons, automations</text>
+        <rect x="626" y="30" width="90" height="54" rx="10" fill="#f8fafc" stroke="#1d2433"/>
+        <text x="671" y="53" text-anchor="middle" font-size="11" font-weight="700">You</text><text x="671" y="69" text-anchor="middle">live view</text>
+        <rect x="626" y="100" width="90" height="54" rx="10" fill="#fef2f2" stroke="#b91c1c"/>
+        <text x="671" y="122" text-anchor="middle" font-size="11" font-weight="700">Chime</text><text x="671" y="138" text-anchor="middle">in the browser</text>
+        <line x1="136" y1="49" x2="158" y2="49" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="136" y1="125" x2="158" y2="125" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="280" y1="49" x2="304" y2="72" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="280" y1="125" x2="304" y2="108" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="376" y1="130" x2="376" y2="166" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="446" y1="90" x2="470" y2="90" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="446" y1="195" x2="537" y2="132" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="602" y1="72" x2="624" y2="60" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+        <line x1="602" y1="108" x2="624" y2="124" stroke="#1d2433" stroke-width="1.5" marker-end="url(#d)"/>
+      </g>
+    </svg>
+    <figcaption>Figure 4. Every camera ends up in Frigate (recording and detection) and in Home Assistant (one dashboard and controls).</figcaption>
+  </figure>
+  <div class="tech">
+    <div class="card t-violet"><h4>Home Assistant <span>control panel</span></h4><p>The smart-home app at <b>home.energiapower.llc</b>: all cameras on one page, the parking lot light button, and automations such as "chime when someone's in the parking lot". It has its own login with a phone code, and works with the phone app.</p></div>
+    <div class="card t-green"><h4>Frigate <span>recorder with eyes</span></h4><p>Records the cameras around events and uses AI (OpenVINO on an Intel graphics chip) to recognise people and cars. It keeps clips for a limited time so the disk never fills up.</p></div>
+    <div class="card t-teal"><h4>Neolink <span>translator</span></h4><p>The Reolink E1 cameras speak their own language; Neolink translates it into the standard camera format (RTSP) and passes pan/tilt commands back.</p></div>
+    <div class="card t-teal"><h4>Blink bridge <span>custom-built</span></h4><p>Blink cameras only stream through Blink's cloud. This bridge, written for this project, starts live views on request. The battery cameras only wake when someone asks, to save battery. The wired parking lot camera stays live, and the bridge passes the video to Frigate through <b>go2rtc</b>, a video relay.</p></div>
+    <div class="card t-amber"><h4>Mosquitto (MQTT) <span>message board</span></h4><p>A tiny message service the camera tools use to talk to Home Assistant: "person detected", "start live view", "light on".</p></div>
+    <div class="card t-red"><h4>Browser Mod <span>speaker in the browser</span></h4><p>An add-on that lets Home Assistant play the parking-lot chime in a computer's browser while the dashboard is open, with an on/off bell button.</p></div>
+  </div>
+  <p class="small">Not working yet: the Wyze Cam Pans (they don't answer the bridge built for them). The Blink doorbell's live view depends on its weak Wi-Fi connection.</p>
+</div>
+
+<!-- 11. STORIES -->
+<div class="section">
+  <h2>11. Four everyday stories, start to finish</h2>
+  <h3>A. Opening the CRM from a coffee shop</h3>
+  <ol class="steps">
+    <li>You type <b>hub.energiapower.llc</b>. Cloudflare answers with the padlock and passes the visit down the private tunnel.</li>
+    <li>Traefik sees "hub" and hands the visit to the hub portal, which sends you to Authentik to sign in: password, then the 6-digit code from your phone.</li>
+    <li>The hub shows the tiles your group may see, with green lights because each app answered its health check seconds ago.</li>
+    <li>You click <b>CRM</b>. It opens crm.energiapower.llc, which arrives through the same tunnel. The CRM has its own login and reads your customers from its database in the cluster.</li>
+  </ol>
+  <h3>B. A car pulls into the parking lot</h3>
+  <ol class="steps">
+    <li>The Blink camera's live video flows through Blink's cloud to the bridge, and on to Frigate.</li>
+    <li>Frigate's AI spots a car and posts "car in parking lot" on the MQTT message board.</li>
+    <li>Home Assistant sees it. Because the bell is switched on, it tells Browser Mod to play the chime and show "Car in the Parking Lot" in every registered browser.</li>
+    <li>Frigate keeps a clip of the event. You can tap the Parking Lot card to watch live, and switch the light on.</li>
+  </ol>
+  <h3>C. A Petros improvement ships</h3>
+  <ol class="steps">
+    <li>A change to Petros is saved to GitHub.</li>
+    <li>GitHub Actions builds the app and runs every test inside it. One failure, and it stops there, with nothing changed.</li>
+    <li>If all pass, the package is stored as the next version (for example 2.4.4) and the blueprint is updated to use it.</li>
+    <li>Argo CD notices within minutes and swaps the old version for the new one. The login page now shows <b>v2.4.4</b>.</li>
+  </ol>
+  <h3>D. 3:30 AM, every night</h3>
+  <ol class="steps">
+    <li>Longhorn copies each important volume to the router's drives: the CRM, hub, Authentik and Investco databases, Godseye's accounts, the Petros export, Home Assistant, Grafana, and Frigate's settings. Camera recordings aren't included, because they expire after a few days anyway; important clips will be kept on the router (Phase 6).</li>
+    <li>Prometheus records whether each backup worked. If one fails, or a backup is overdue, Alertmanager emails the admin.</li>
+    <li>In the morning, the hub's Backups page shows the time of every last successful save.</li>
+  </ol>
+</div>
+
+<!-- 12. SUMMARY TABLE -->
+<div class="section">
+  <h2>12. Why each piece matters (summary)</h2>
+  <table>
+    <tr><th style="width:20%">Technology</th><th style="width:26%">In one sentence</th><th style="width:26%">Works closely with</th><th>Without it…</th></tr>
+    <tr><td><b>Kubernetes (k3s)</b></td><td>Runs and heals every app on three computers</td><td>Everything below</td><td>Apps started and fixed by hand; one dead computer means an outage</td></tr>
+    <tr><td><b>Calico</b></td><td>Private network and traffic rules between apps</td><td>Kubernetes</td><td>Any app could talk to any database</td></tr>
+    <tr><td><b>MetalLB</b></td><td>Fixed home-network addresses for some apps</td><td>Traefik, Home Assistant</td><td>Devices in the house couldn't find the apps</td></tr>
+    <tr><td><b>Traefik</b></td><td>Sends each web address to the right app</td><td>Cloudflare Tunnel, Authentik</td><td>Every app would need its own entrance</td></tr>
+    <tr><td><b>Cloudflare + Tunnel</b></td><td>Safe way in from the internet, with the padlock</td><td>Traefik</td><td>Open doors on the router, and a public home address</td></tr>
+    <tr><td><b>Authentik</b></td><td>One sign-in with a phone code; groups decide access</td><td>Hub, Traefik, Frigate, Longhorn</td><td>Many separate passwords; no central way to remove access</td></tr>
+    <tr><td><b>Hub portal</b></td><td>The page of tiles, status lights, health and backups</td><td>Authentik, Postgres, Prometheus, Longhorn</td><td>No single place to find and check everything</td></tr>
+    <tr><td><b>PostgreSQL</b></td><td>The apps' databases</td><td>Longhorn</td><td>Nowhere reliable to keep business records</td></tr>
+    <tr><td><b>GitHub + Actions + GHCR</b></td><td>Blueprints, automatic testing, versioned packages</td><td>Argo CD</td><td>Untested changes; no history; no way to undo</td></tr>
+    <tr><td><b>Argo CD</b></td><td>Keeps the cluster matching the blueprints</td><td>GitHub, Kubernetes</td><td>Manual deployments and settings drift over time</td></tr>
+    <tr><td><b>Sealed Secrets</b></td><td>Passwords stored safely alongside the blueprints</td><td>Argo CD</td><td>Passwords in plain text, or kept off the record</td></tr>
+    <tr><td><b>Longhorn</b></td><td>App disks copied across computers; snapshots and backups</td><td>Router drives, Prometheus</td><td>A disk failure loses data; no nightly copies</td></tr>
+    <tr><td><b>Prometheus, Grafana, Loki, Alertmanager</b></td><td>Measure, chart, log and alert</td><td>Every app; email</td><td>Problems found only when someone complains</td></tr>
+    <tr><td><b>Home Assistant</b></td><td>One smart-home dashboard and automations</td><td>Frigate, MQTT, Browser Mod</td><td>A separate app for every brand of device</td></tr>
+    <tr><td><b>Frigate</b></td><td>Records cameras; spots people and cars</td><td>Neolink, Blink bridge, MQTT</td><td>No recordings or detections for the Reolink and wired cameras</td></tr>
+    <tr><td><b>Neolink / Blink bridge / go2rtc</b></td><td>Translate each brand's video into a standard format</td><td>Frigate</td><td>Those cameras couldn't join the shared view</td></tr>
+    <tr><td><b>Mosquitto (MQTT)</b></td><td>Message board between camera tools and Home Assistant</td><td>Frigate, bridges, Home Assistant</td><td>No detection events, buttons or light control</td></tr>
+    <tr><td><b>Synology router</b></td><td>Internet, separate networks, backup storage</td><td>Longhorn, everything</td><td>Smart devices mixed with family computers; no backup target</td></tr>
+  </table>
+</div>
+
+<!-- 13. NEXT -->
+<div class="section">
+  <h2>13. What's next</h2>
+  <p>The project is built in phases. Phases 0–3 are finished (foundation, sign-in, the portal, monitoring and backups). Phase 4 (cameras and devices) is mostly done.</p>
+  <table>
+    <tr><th style="width:24%">Phase</th><th>What it adds</th><th style="width:16%">Status</th></tr>
+    <tr><td><b>4 · Devices &amp; cameras</b></td><td>Remaining: the Wyze cameras, more smart devices (plug, chiller, bulbs, thermostat, locks, garage door, solar), and copying important clips to the router.</td><td>Mostly done</td></tr>
+    <tr><td><b>5 · Computers</b></td><td>Reach the family's PCs from the hub in a web browser (remote desktop), behind the same sign-in and phone code.</td><td>Planned</td></tr>
+    <tr><td><b>6 · Router storage</b></td><td>Use the router's two 4&nbsp;TB drives from the hub: browse files, see space and drive health, and give apps a shared folder (also where important camera clips will go).</td><td>Planned (suggested next)</td></tr>
+    <tr><td><b>7 · Hardening</b></td><td>A security pass: an off-site copy of the backups, tighter rules between apps, password rotation, proper certificates inside the cluster, and relief for the busy control-plane computer.</td><td>Planned</td></tr>
+  </table>
+  <div class="callout"><b>Related projects</b>MLflow for tracking Petros's AI training experiments, and an energy-broker AI agent that turns requests for proposals into contracts. Both would run on this same platform and appear as tiles on the hub.</div>
+</div>
+
+<!-- 14. GLOSSARY -->
+<div class="section">
+  <h2>14. Glossary</h2>
+  <dl>
+    <dt>App / service</dt><dd>A program people use through a web browser, such as the CRM.</dd>
+    <dt>Backup</dt><dd>A copy of data kept somewhere else, to bring it back after a loss.</dd>
+    <dt>Cluster</dt><dd>Several computers working together as one system.</dd>
+    <dt>Container</dt><dd>An app packed with everything it needs, so it runs the same anywhere.</dd>
+    <dt>Control plane</dt><dd>The part of the cluster that makes the decisions; here, the computer "openclaw".</dd>
+    <dt>Database</dt><dd>Organised storage for records, such as customers and contracts.</dd>
+    <dt>Deploy</dt><dd>Put a new version of an app into use.</dd>
+    <dt>DNS / domain</dt><dd>The internet's address book; energiapower.llc is the domain.</dd>
+    <dt>Encryption (HTTPS)</dt><dd>Scrambling traffic so only the two ends can read it; the browser's padlock.</dd>
+    <dt>GitOps</dt><dd>Running a system by changing written blueprints that machines then apply.</dd>
+    <dt>Image</dt><dd>A finished, versioned app package ready to run as a container.</dd>
+    <dt>Log</dt><dd>An app's diary of what it did and what went wrong.</dd>
+    <dt>MQTT</dt><dd>A lightweight messaging system for smart devices.</dd>
+    <dt>Network policy</dt><dd>A rule saying which apps may talk to which.</dd>
+    <dt>Node</dt><dd>One computer in the cluster.</dd>
+    <dt>Pod</dt><dd>A running copy of an app (one or a few containers) on a node.</dd>
+    <dt>Restore test</dt><dd>Bringing a backup back into a test area to prove it works.</dd>
+    <dt>RTSP</dt><dd>A standard way for cameras to send live video.</dd>
+    <dt>Single sign-on (SSO)</dt><dd>Signing in once to use several apps.</dd>
+    <dt>Snapshot</dt><dd>A quick "undo point" for a disk, kept on the cluster.</dd>
+    <dt>Tunnel</dt><dd>A private line the cluster opens out to Cloudflare, so nobody has to connect in.</dd>
+    <dt>Two-factor sign-in (2FA)</dt><dd>Password plus a one-time code from your phone.</dd>
+    <dt>VLAN</dt><dd>A separate network on the same router, such as the smart-device network.</dd>
+    <dt>Volume</dt><dd>An app's own disk, managed by Longhorn.</dd>
+  </dl>
+</div>
+
+</body>
+</html>
