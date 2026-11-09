@@ -64,6 +64,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("blink-bridge")
 # The Blink library logs request details at debug level; keep it quiet.
 logging.getLogger("blinkpy").setLevel(logging.WARNING)
+# Except a few live-stream lines that say why Blink ended a session. Other debug lines from the
+# stream code include sign-in details, so only these exact messages pass.
+_SESSION_LINES = ("Command state", "Client disconnected", "Last client disconnected",
+                  "Streaming was aborted", "Sending was aborted", "Receiving was aborted")
+_stream_log = logging.getLogger("blinkpy.livestream")
+_stream_log.setLevel(logging.DEBUG)
+_stream_log.addFilter(lambda record: record.levelno >= logging.WARNING or str(record.msg).startswith(_SESSION_LINES))
 
 
 @dataclass
