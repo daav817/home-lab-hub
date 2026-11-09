@@ -43,6 +43,38 @@ import aiomqtt
 from aiohttp import ClientSession
 from blinkpy.auth import Auth, BlinkTwoFARequiredError
 from blinkpy.blinkpy import Blink
+from blinkpy.livestream import BlinkLiveStream
+
+
+async def _recv_whole_packets(self) -> None:
+    """Replaces BlinkLiveStream.recv (blinkpy 0.25.9). The library reads each packet with
+    read(n), which may return part of it when the packet arrives split across TCP segments,
+    and then treats that as the end of the stream ("Insufficient data for payload"): live views
+    ended after a few seconds. readexactly waits for the whole packet."""
+    try:
+        while True:
+            header = await self.target_reader.readexactly(9)
+            msgtype = header[0]
+            length = int.from_bytes(header[5:9], byteorder="big")
+            if length <= 0:
+                continue
+            data = await self.target_reader.readexactly(length)
+            if msgtype != 0x00 or data[0] != 0x47:
+                continue  # not MPEG-TS video
+            for writer in self.clients:
+                if not writer.is_closing():
+                    writer.write(data)
+                    await writer.drain()
+    except asyncio.IncompleteReadError:
+        pass  # Blink closed the stream
+    except Exception:
+        logging.getLogger("blink-bridge").exception("Error while receiving Blink data")
+    finally:
+        self.target_writer.close()
+        logging.getLogger("blinkpy.livestream").debug("Receiving was aborted, aborting sending")
+
+
+BlinkLiveStream.recv = _recv_whole_packets
 
 TOKEN_FILE = os.environ.get("BLINK_TOKEN_FILE", "/data/blink.json")
 CONTINUE_WAIT = int(os.environ.get("CONTINUE_WAIT", "60"))
