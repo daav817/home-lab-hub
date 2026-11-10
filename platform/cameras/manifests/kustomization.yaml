@@ -16,6 +16,7 @@ resources:
   - clip-keeper.yaml
   - clip-keeper-mqtt.sealedsecret.yaml
   - clip-keeper-api.sealedsecret.yaml
+  - camera-clips-smb.sealedsecret.yaml
 # The bridge's code and go2rtc settings. A change here gets a new name, which restarts the pod.
 configMapGenerator:
   - name: blink-bridge-code
