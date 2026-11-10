@@ -135,7 +135,7 @@ data:
           unique_id: front_door_doorbell
           state_topic: doorbell/front_door
           event_types:
-            - press
+            - ring
           device_class: doorbell
           icon: mdi:doorbell
 
@@ -180,7 +180,7 @@ data:
               - action: mqtt.publish
                 data:
                   topic: doorbell/front_door
-                  payload: "{{ {'event_type': 'press', 'message': message} | to_json }}"
+                  payload: "{{ {'event_type': 'ring', 'message': message} | to_json }}"
             else:
               - if: "{{ motion_camera | trim != '' }}"
                 then:

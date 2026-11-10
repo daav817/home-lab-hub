@@ -358,7 +358,7 @@ class Keeper:
         """Logs a press and saves a clip of the camera's next 90 seconds (Home Assistant has
         already asked the Blink bridge to wake the camera, so Frigate gets its video)."""
         data = json.loads(payload) if payload.strip().startswith("{") else {}
-        if data.get("event_type", "press") != "press":
+        if data.get("event_type", "ring") not in ("ring", "press"):
             return
         frigate_camera = f"{camera}_live" if f"{camera}_live" in self.cameras else camera
         pressed = time.time()
