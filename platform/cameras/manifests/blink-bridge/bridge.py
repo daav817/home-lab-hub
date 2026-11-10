@@ -270,9 +270,10 @@ class Bridge:
 
     async def handle_command(self, camera: Camera, command: str, payload: str) -> None:
         if command == "start":
-            # "motion" comes from Home Assistant when Blink sees motion, so Frigate can record.
-            from_motion = payload == "motion"
-            log.info("%s: start requested%s", camera.key, " (motion)" if from_motion else "")
+            # "motion" and "doorbell" come from Home Assistant (Blink motion, or the doorbell
+            # ringing), so Frigate can record: nobody is watching, so no Continue prompt.
+            from_motion = payload in ("motion", "doorbell")
+            log.info("%s: start requested%s", camera.key, f" ({payload})" if from_motion else "")
             if camera.task is None or camera.task.done():
                 camera.from_motion = from_motion
             elif not from_motion:

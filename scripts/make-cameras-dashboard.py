@@ -88,21 +88,50 @@ def blink(cam, title, live):
     ]
 
 
-def live_only(cam, title, device):
+def when(entity, state, elements):
+    """Picture elements shown only while `entity` is `state`."""
+    return {"type": "conditional", "conditions": [{"condition": "state", "entity": entity, "state": state}],
+            "elements": elements}
+
+
+def live_only(cam, title, device, sound):
     """A camera that's always live through Frigate, like the wired Blink Parking Lot, with its
     controls on the picture: a big light button (tap to switch; the live view pauses a few
-    seconds while Blink changes it), night vision, and full screen."""
+    seconds while Blink changes it), night vision, sound, and full screen.
+    The tile itself is always silent (Home Assistant mutes dashboard cards). With `sound` off,
+    tapping the picture or Full screen opens a large silent view (a Browser Mod popup); with it
+    on, Home Assistant's own player, which plays the camera's sound and has its controls."""
+    silent_view = {"action": "fire-dom-event", "browser_mod": {
+        "service": "browser_mod.popup",
+        "data": {"title": title, "size": "wide",
+                 "content": {"type": "picture-entity", "entity": f"camera.{cam}", "camera_view": "live",
+                             "show_name": False, "show_state": False, "tap_action": {"action": "none"}}}}}
+    with_sound = {"action": "more-info", "entity": f"camera.{cam}"}
+    whole_picture = {"top": "50%", "left": "50%", "width": "100%", "height": "100%"}
     return {"type": "picture-elements", "camera_image": f"camera.{cam}", "camera_view": "live",
             "elements": [
                 # Invisible layer over the whole picture (first, so the buttons sit on top):
                 # tapping the video opens it large, like the other camera cards.
-                {"type": "image", "image": CLEAR, "entity": f"camera.{cam}",
-                 "tap_action": {"action": "more-info"}, "hold_action": {"action": "none"},
-                 "style": {"top": "50%", "left": "50%", "width": "100%", "height": "100%"}},
+                when(sound, "off", [
+                    {"type": "image", "image": CLEAR, "tap_action": copy.deepcopy(silent_view), "hold_action": {"action": "none"},
+                     "style": dict(whole_picture)},
+                    {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen (no sound)",
+                     "tap_action": copy.deepcopy(silent_view), "style": {**ROUND, "top": "4%", "right": "4%"}},
+                ]),
+                when(sound, "on", [
+                    {"type": "image", "image": CLEAR, "entity": f"camera.{cam}", "tap_action": copy.deepcopy(with_sound),
+                     "hold_action": {"action": "none"}, "style": dict(whole_picture)},
+                    {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen (with sound)",
+                     "tap_action": copy.deepcopy(with_sound), "style": {**ROUND, "top": "4%", "right": "4%"}},
+                ]),
                 label(f"sensor.{device}_live_view", f"{title} · ", {"top": "4%", "left": "4%"}),
-                {"type": "icon", "icon": "mdi:fullscreen", "title": "Full screen",
-                 "tap_action": {"action": "more-info", "entity": f"camera.{cam}"},
-                 "style": {**ROUND, "top": "4%", "right": "4%"}},
+                # Camera sound in the large view (tap to switch)
+                when(sound, "off", [{"type": "icon", "icon": "mdi:volume-off", "title": "Sound off (tap for sound)",
+                                     "tap_action": {"action": "toggle", "entity": sound},
+                                     "style": {**ROUND, "bottom": "4%", "right": "59%"}}]),
+                when(sound, "on", [{"type": "icon", "icon": "mdi:volume-high", "title": "Sound on (tap to mute)",
+                                    "tap_action": {"action": "toggle", "entity": sound},
+                                    "style": {**ROUND, "color": "#03a9f4", "bottom": "4%", "right": "59%"}}]),
                 # Chime in this browser when Frigate sees a person or car (Browser Mod; tap to switch)
                 {"type": "state-icon", "entity": "input_boolean.parking_lot_alert_sound",
                  "title": "Alert sound in the browser", "tap_action": {"action": "toggle"},
@@ -120,7 +149,7 @@ def live_only(cam, title, device):
 garage = reolink("garage", "Garage", "mdi:car", "Minivan")
 basement = reolink("basement", "Basement", "mdi:stairs", "Stairs")
 tiles = [garage, basement,
-         live_only("parking_lot_live", "Parking Lot", "parking_lot_live_view"),
+         live_only("parking_lot_live", "Parking Lot", "parking_lot_live_view", "input_boolean.parking_lot_live_sound"),
          # Live video comes through Frigate (camera.<name>_live), the same route as the Reolinks.
          *blink("front_door", "Front Door", live="front_door_live"),
          *blink("front_porch_and_swings", "Front Porch", live="front_porch_live")]
@@ -148,6 +177,16 @@ recording = {
     ],
 }
 tiles.append(recording)
+
+# Doorbell presses (from Blink's phone notification, see doorbell.yaml in the Home Assistant
+# config). The hub's Recordings page lists the same presses with their clips.
+doorbell = {"type": "vertical-stack", "cards": [
+    {"type": "logbook", "title": "Front Door doorbell", "target": {"entity_id": ["event.front_door_doorbell"]},
+     "hours_to_show": 168},
+    {"type": "button", "name": "Doorbell clips on the hub", "icon": "mdi:doorbell-video", "show_state": False,
+     "tap_action": {"action": "url", "url_path": "https://hub.energiapower.llc/recordings#doorbell"}},
+]}
+tiles.append(doorbell)
 
 config = {"views": [
     {"title": "All cameras", "path": "all", "type": "panel",

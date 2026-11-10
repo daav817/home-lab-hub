@@ -10,7 +10,10 @@ never removed) and gives the hub an API to list, play, group and delete clips.
 Pieces:
 - MQTT (Mosquitto): Frigate's `frigate/reviews`; Home Assistant controls through discovery
   (Away switch, a switch per camera, storage limit, status sensors); `clips/schedule` from a
-  Home Assistant automation that mirrors the schedule helper.
+  Home Assistant automation that mirrors the schedule helper; `doorbell/<camera>` from Home
+  Assistant when the doorbell rings (Blink's phone notification, see doorbell.yaml there).
+- Doorbell presses are always logged and always get a clip (whatever Away and the schedule say),
+  kept in the "Doorbell" group.
 - Frigate's API: the camera list and `/api/<camera>/start/<s>/end/<e>/clip.mp4`.
 - Storage: an rclone sidecar serves the router's SMB share as WebDAV on 127.0.0.1:8090.
 - Index: SQLite on a small volume (clips, groups, settings), reconciled with the share.
@@ -35,8 +38,8 @@ import aiomqtt
 from aiohttp import ClientSession, ClientTimeout, web
 
 from clip_logic import (
-    CLIP_ID, GROUP_NAME, StoredClip, clip_path, clip_window, cut_due, display_name, evictions,
-    wanted_labels,
+    CLIP_ID, DOORBELL_GROUP, GROUP_NAME, StoredClip, clip_path, clip_window, cut_due, display_name,
+    doorbell_clip_id, doorbell_window, evictions, path_time, wanted_labels,
 )
 
 FRIGATE = os.environ.get("FRIGATE_URL", "http://frigate.cameras.svc.cluster.local:5000")
@@ -78,6 +81,10 @@ class Index:
             create index if not exists clips_created on clips(created);
             create index if not exists clips_grp on clips(grp);
             create table if not exists settings (key text primary key, value text not null);
+            create table if not exists doorbell (
+              id integer primary key, camera text not null, pressed real not null,
+              message text not null, clip text);
+            create index if not exists doorbell_pressed on doorbell(pressed);
         """)
         self.db.commit()
 
@@ -130,6 +137,19 @@ class Index:
         cur = self.db.executemany("update clips set grp = ? where id = ?", [(group, i) for i in ids])
         self.db.commit()
         return cur.rowcount
+
+    def add_press(self, camera: str, pressed: float, message: str, clip: str) -> None:
+        self.db.execute("insert into doorbell(camera, pressed, message, clip) values(?,?,?,?)", (camera, pressed, message, clip))
+        self.db.commit()
+
+    def last_press(self, camera: str) -> tuple[float, str] | None:
+        row = self.db.execute("select pressed, clip from doorbell where camera = ? order by pressed desc limit 1", (camera,)).fetchone()
+        return (row["pressed"], row["clip"]) if row else None
+
+    def presses(self, limit: int):
+        return self.db.execute(
+            "select d.*, c.finish - c.start seconds from doorbell d left join clips c on c.id = d.clip "
+            "order by d.pressed desc limit ?", (limit,)).fetchall()
 
     def paths(self) -> dict[str, str]:
         return {r["path"]: r["id"] for r in self.db.execute("select id, path from clips")}
@@ -299,7 +319,7 @@ class Keeper:
                                           identifier="clip-keeper") as client:
                     self.mqtt = client
                     for topic in ("frigate/reviews", f"{TOPIC}/schedule", f"{TOPIC}/away/set", f"{TOPIC}/limit/set",
-                                  f"{TOPIC}/camera/+/set", f"{DISCOVERY}/status"):
+                                  f"{TOPIC}/camera/+/set", f"{DISCOVERY}/status", "doorbell/+"):
                         await client.subscribe(topic)
                     await self.announce()
                     async for message in client.messages:
@@ -329,6 +349,41 @@ class Keeper:
             await self.set_camera(topic.split("/")[2], payload.strip().upper() == "ON")
         elif topic == f"{DISCOVERY}/status" and payload == "online":
             await self.announce()
+        elif topic.startswith("doorbell/"):
+            await self.on_doorbell(topic.split("/")[1], payload)
+
+    # --- Doorbell presses ---
+
+    async def on_doorbell(self, camera: str, payload: str) -> None:
+        """Logs a press and saves a clip of the camera's next 90 seconds (Home Assistant has
+        already asked the Blink bridge to wake the camera, so Frigate gets its video)."""
+        data = json.loads(payload) if payload.strip().startswith("{") else {}
+        if data.get("event_type", "press") != "press":
+            return
+        frigate_camera = f"{camera}_live" if f"{camera}_live" in self.cameras else camera
+        pressed = time.time()
+        clip_id, new_clip = doorbell_clip_id(pressed, self.index.last_press(frigate_camera))
+        message = str(data.get("message") or "Doorbell pressed")[:300]
+        self.index.add_press(frigate_camera, pressed, message, clip_id)
+        log.info("%s: doorbell pressed (%s)", frigate_camera, "new clip" if new_clip else f"shares {clip_id}")
+        if new_clip:
+            asyncio.create_task(self.save_doorbell(frigate_camera, pressed, clip_id))
+
+    async def save_doorbell(self, camera: str, pressed: float, clip_id: str) -> None:
+        window = doorbell_window(pressed)
+        try:
+            # A manual Frigate event keeps the recording even if nobody is detected (Frigate keeps
+            # only video around its alerts here).
+            if camera in self.cameras:
+                async with self.http.post(f"{FRIGATE}/api/events/{camera}/doorbell/create",
+                                          json={"duration": int(window[1] - pressed), "include_recording": True},
+                                          timeout=ClientTimeout(total=30)) as r:
+                    if r.status != 200:
+                        log.warning("%s: Frigate didn't create the doorbell event (HTTP %s)", camera, r.status)
+            await asyncio.sleep(max(0.0, window[1] + SEGMENT_DELAY - time.time()))
+            await self.save(clip_id, camera, window, ["doorbell"], group=DOORBELL_GROUP)
+        except Exception:
+            log.exception("%s: saving the doorbell clip %s failed", camera, clip_id)
 
     # --- Detections -> clips ---
 
@@ -382,7 +437,8 @@ class Keeper:
             await asyncio.sleep(15)  # the last segment may still be in Frigate's cache
         raise RuntimeError(f"Frigate returned too little video ({len(data)} bytes)")
 
-    async def save(self, review_id: str, camera: str, window: tuple[float, float], labels: list[str]) -> None:
+    async def save(self, review_id: str, camera: str, window: tuple[float, float], labels: list[str],
+                   group: str | None = None) -> None:
         async with self.lock:
             if not await self.check_storage():
                 log.warning("%s: storage not available; clip for %s not saved", camera, review_id)
@@ -394,7 +450,8 @@ class Keeper:
             path = clip_path(camera, window[0], labels, review_id, TZ)
             await self.storage.put(path, data)
             self.index.add({"id": review_id, "camera": camera, "start": window[0], "finish": window[1],
-                            "labels": ",".join(labels), "size": len(data), "path": path, "created": time.time()})
+                            "labels": ",".join(labels), "size": len(data), "path": path, "created": time.time(),
+                            "grp": group})
             log.info("%s: saved %s (%.0f s, %.1f MB)", camera, path, window[1] - window[0], len(data) / 1e6)
             await self.enforce_limit(locked=True)
         await self.publish_state()
@@ -491,6 +548,7 @@ class Keeper:
             web.get("/api/groups", self.api_groups),
             web.put("/api/settings", self.api_settings),
             web.post("/api/clips/from-review", self.api_from_review),
+            web.get("/api/doorbell", self.api_doorbell),
         ])
         return app
 
@@ -592,6 +650,16 @@ class Keeper:
         if not row:
             return web.json_response({"error": f"not saved: {self.storage_state}"}, status=503)
         return web.json_response(self.clip_json(row))
+
+    async def api_doorbell(self, request: web.Request) -> web.Response:
+        """Doorbell presses, newest first, each with its clip once it's saved (null before that,
+        or if the camera sent no video)."""
+        rows = self.index.presses(min(int(request.query.get("limit", "100")), 500))
+        return web.json_response([{
+            "camera": r["camera"], "cameraName": display_name(r["camera"]), "pressed": r["pressed"],
+            "message": r["message"], "clip": r["clip"] if r["seconds"] is not None else None,
+            "seconds": round(r["seconds"]) if r["seconds"] is not None else None,
+        } for r in rows])
 
     async def api_settings(self, request: web.Request) -> web.Response:
         body = await request.json()

@@ -41,6 +41,7 @@ data:
     user clipkeeper
     topic read frigate/#
     topic readwrite clips/#
+    topic read doorbell/#
     topic write homeassistant/#
     topic read homeassistant/status
 ---

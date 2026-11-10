@@ -32,6 +32,27 @@ def clip_window(start: float, end: float | None, covered_until: float = 0.0) -> 
     return begin, finish
 
 
+# Doorbell presses. The Front Door camera is asleep when the button is pressed: Blink wakes it
+# (5-25 s) and Frigate joins the stream 10-30 s later, so the clip covers the 90 s after the press.
+DOORBELL_SECONDS = 90
+DOORBELL_REPEAT = 60  # a press this soon after the last one shares its clip
+DOORBELL_GROUP = "Doorbell"  # doorbell clips go in this group, so the size limit never removes them
+
+
+def doorbell_window(pressed: float) -> tuple[float, float]:
+    """Seconds (start, end) of the clip saved for a doorbell press."""
+    return pressed - PRE_SECONDS, pressed + DOORBELL_SECONDS
+
+
+def doorbell_clip_id(pressed: float, previous: tuple[float, str] | None) -> tuple[str, bool]:
+    """The clip id for a press at `pressed`, and whether a new clip must be saved. `previous`
+    is the last press's (time, clip id): a press within DOORBELL_REPEAT seconds of it reuses that
+    clip, which already covers it."""
+    if previous and 0 <= pressed - previous[0] < DOORBELL_REPEAT:
+        return previous[1], False
+    return f"doorbell-{int(pressed)}", True
+
+
 def cut_due(start: float, end: float | None) -> float:
     """When (epoch seconds) the clip for this detection must be cut even if it hasn't ended."""
     return start - PRE_SECONDS + MAX_SECONDS

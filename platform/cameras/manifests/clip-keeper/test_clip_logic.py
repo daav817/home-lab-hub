@@ -7,7 +7,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 
 from clip_logic import (  # noqa: E402
-    StoredClip, clip_path, clip_window, display_name, evictions, path_time, wanted_labels,
+    StoredClip, clip_path, clip_window, display_name, doorbell_clip_id, doorbell_window, evictions,
+    path_time, wanted_labels,
 )
 
 
@@ -45,6 +46,20 @@ class Eviction(unittest.TestCase):
 
     def test_under_limit_nothing_to_do(self):
         self.assertEqual(evictions([StoredClip("a", 1, 10, None)], 100), ([], False))
+
+
+class Doorbell(unittest.TestCase):
+    def test_window_covers_the_wake_up(self):
+        self.assertEqual(doorbell_window(1000), (995, 1090))
+
+    def test_first_press_gets_a_new_clip(self):
+        self.assertEqual(doorbell_clip_id(1000.7, None), ("doorbell-1000", True))
+
+    def test_quick_second_press_shares_the_clip(self):
+        self.assertEqual(doorbell_clip_id(1030, (1000, "doorbell-1000")), ("doorbell-1000", False))
+
+    def test_later_press_gets_its_own_clip(self):
+        self.assertEqual(doorbell_clip_id(1070, (1000, "doorbell-1000")), ("doorbell-1070", True))
 
 
 class Naming(unittest.TestCase):

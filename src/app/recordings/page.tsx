@@ -3,12 +3,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/access";
 import {
-  canViewClips, ClipsError, getClipStatus, gigabytes, listClips, listGroups,
-  type Clip, type ClipGroup, type ClipStatus,
+  canViewClips, ClipsError, getClipStatus, gigabytes, listClips, listDoorbellPresses, listGroups,
+  type Clip, type ClipGroup, type ClipStatus, type DoorbellPress,
 } from "@/lib/clips";
 import { deleteSelected, groupSelected, saveSettings } from "./actions";
 import { ClipLibrary } from "./clip-library";
 import { ClipSettings } from "./clip-settings";
+import { DoorbellLog } from "./doorbell-log";
 
 type Search = { camera?: string; group?: string };
 
@@ -18,12 +19,13 @@ async function Recordings({ search }: { search: Promise<Search> }) {
   const { camera, group } = await search;
   const isAdmin = user.level === "admin";
 
-  let data: [ClipStatus, ClipGroup[], Clip[]];
+  let data: [ClipStatus, ClipGroup[], Clip[], DoorbellPress[]];
   try {
     data = await Promise.all([
       getClipStatus(),
       listGroups(),
       listClips({ camera, group: group && group !== "__none" ? group : undefined, ungrouped: group === "__none" }),
+      listDoorbellPresses(),
     ]);
   } catch (error) {
     if (!(error instanceof ClipsError)) console.error("Recordings page failed", error);
@@ -33,7 +35,7 @@ async function Recordings({ search }: { search: Promise<Search> }) {
       </p>
     );
   }
-  const [status, groups, clips] = data;
+  const [status, groups, clips, presses] = data;
   const limit = status.limitGb * 1e9;
   const percent = Math.min(100, Math.round((status.used / limit) * 100));
   const storageOk = status.storage === "OK";
@@ -63,6 +65,8 @@ async function Recordings({ search }: { search: Promise<Search> }) {
           always kept.
         </p>
       </section>
+
+      <DoorbellLog presses={presses} />
 
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-sm">

@@ -32,6 +32,17 @@ export type ClipStatus = {
 
 export type ClipGroup = { name: string; count: number; bytes: number };
 
+// A doorbell press. clip is null until the clip is saved (about 2 minutes after the press), or
+// if the camera sent no video.
+export type DoorbellPress = {
+  camera: string;
+  cameraName: string;
+  pressed: number; // epoch seconds
+  message: string;
+  clip: string | null;
+  seconds: number | null;
+};
+
 export class ClipsError extends Error {}
 
 // Viewing matches Frigate (family and admins); changes are admin-only.
@@ -106,6 +117,10 @@ export async function getClipStatus(): Promise<ClipStatus> {
 
 export async function listClips(filters: ClipFilters): Promise<Clip[]> {
   return (await clipsApi(`/api/clips?${clipQuery(filters)}`)).json();
+}
+
+export async function listDoorbellPresses(limit = 50): Promise<DoorbellPress[]> {
+  return (await clipsApi(`/api/doorbell?limit=${limit}`)).json();
 }
 
 export async function listGroups(): Promise<ClipGroup[]> {

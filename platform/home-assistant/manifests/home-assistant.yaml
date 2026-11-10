@@ -81,6 +81,12 @@ data:
       parking_lot_alert_sound:
         name: Parking Lot alert sound
         icon: mdi:bell-ring
+      # The camera's own sound in the large view (tap the Parking Lot picture or Full screen).
+      # Off: the large view is a silent picture. On: Home Assistant's player, with sound and
+      # its controls. The small tile on the dashboard is always silent.
+      parking_lot_live_sound:
+        name: Parking Lot camera sound
+        icon: mdi:volume-high
 
     automation:
       - id: parking_lot_detection_chime
@@ -109,6 +115,79 @@ data:
                 in the Parking Lot
               duration: 8000
           - delay: "00:01:00"
+
+  doorbell.yaml: |
+    # Blink doesn't tell Home Assistant when the doorbell is pressed (no subscription), but it
+    # does send a phone notification. The Home Assistant phone app's "Last notification" sensor,
+    # limited to the Blink app, passes that notification here. Then:
+    # - every Blink notification goes in the logbook (as "Blink notification"),
+    # - a doorbell press fires event.front_door_doorbell (its history is the doorbell log),
+    #   wakes the Front Door camera so Frigate records it, and tells the clip keeper, which
+    #   saves the clip to the router (group "Doorbell") and lists the press on the hub's
+    #   Recordings page,
+    # - a motion notification from a battery camera wakes that camera too, so Frigate records.
+    # Phone setup: Settings > Companion app > Manage sensors > Last notification: enable, give
+    # the app notification access, and set its allow list to com.immedia.blink only (otherwise
+    # every app's notifications reach Home Assistant).
+    mqtt:
+      event:
+        - name: Front Door doorbell
+          unique_id: front_door_doorbell
+          state_topic: doorbell/front_door
+          event_types:
+            - press
+          device_class: doorbell
+          icon: mdi:doorbell
+
+    automation:
+      - id: blink_phone_notification
+        alias: Blink phone notification, log it and handle the doorbell
+        mode: queued
+        max: 20
+        triggers:
+          # The phone's sensor is named after the phone, so match it by its ending.
+          - trigger: event
+            event_type: state_changed
+        conditions:
+          - condition: template
+            value_template: >-
+              {% set e = trigger.event.data %}
+              {{ e.entity_id.endswith('_last_notification') and e.new_state is not none
+                 and e.new_state.attributes.get('package') == 'com.immedia.blink'
+                 and (e.old_state is none or e.new_state.last_changed != e.old_state.last_changed
+                      or e.new_state.attributes.get('post_time') != e.old_state.attributes.get('post_time')) }}
+        variables:
+          title: "{{ trigger.event.data.new_state.attributes.get('android.title') or '' }}"
+          text: "{{ trigger.event.data.new_state.attributes.get('android.text') or trigger.event.data.new_state.state }}"
+          message: "{{ [title, text] | select | join(': ') }}"
+          words: "{{ (title ~ ' ' ~ text) | lower }}"
+          # Blink's wording, matched loosely; check the logbook if a press is missed.
+          doorbell: "{{ words is search('doorbell|someone is at|rang|ringing|pressed') and 'motion' not in words }}"
+          motion_camera: >-
+            {% if 'motion' in words and 'front door' in words %}front_door
+            {% elif 'motion' in words and 'porch' in words %}front_porch{% endif %}
+        actions:
+          - action: logbook.log
+            data:
+              name: Blink notification
+              message: "{{ message }}"
+          - if: "{{ doorbell }}"
+            then:
+              - action: mqtt.publish
+                data:
+                  topic: blink/front_door/start
+                  payload: doorbell
+              - action: mqtt.publish
+                data:
+                  topic: doorbell/front_door
+                  payload: "{{ {'event_type': 'press', 'message': message} | to_json }}"
+            else:
+              - if: "{{ motion_camera | trim != '' }}"
+                then:
+                  - action: mqtt.publish
+                    data:
+                      topic: "blink/{{ motion_camera | trim }}/start"
+                      payload: motion
 
   blink_live.yaml: |
     # When a battery Blink camera's live session ends, the Blink bridge waits 60 seconds for
@@ -215,6 +294,7 @@ spec:
               cp /seed/configuration.yaml /config/configuration.yaml
               mkdir -p /config/packages
               cp /seed/blink_live.yaml /config/packages/blink_live.yaml
+              cp /seed/doorbell.yaml /config/packages/doorbell.yaml
               mkdir -p /config/www
               cp /seed/camera-loading.svg /config/www/camera-loading.svg
               cp /seed/parking_lot_alert.yaml /config/packages/parking_lot_alert.yaml
