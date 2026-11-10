@@ -91,7 +91,11 @@ async function Portal() {
 export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8">
-      <h1 className="brand-text text-4xl font-bold tracking-tight sm:text-6xl">Home Lab Hub</h1>
+      <h1 className="flex items-center gap-3 sm:gap-4">
+        {/* eslint-disable-next-line @next/next/no-img-element -- small static SVG, nothing to optimize */}
+        <img src="/icon.svg" alt="" width={64} height={64} className="size-10 sm:size-16" />
+        <span className="brand-text text-4xl font-bold tracking-tight sm:text-6xl">Home Lab Hub</span>
+      </h1>
       <Suspense fallback={<p className="text-muted text-lg">Loading…</p>}>
         <Portal />
       </Suspense>

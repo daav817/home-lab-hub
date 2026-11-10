@@ -15,6 +15,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Home Lab Hub",
   description: "Central portal for the energiapower.llc home lab",
+  // public/icon.svg: a lab flask; apple-icon.png is the same drawing at 180 px for phone home screens.
+  icons: { icon: { url: "/icon.svg", type: "image/svg+xml" }, apple: "/apple-icon.png" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
