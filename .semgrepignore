@@ -1,0 +1,7 @@
+# Semgrep: keep the default exclusions (everything git ignores).
+:include .gitignore
+
+# Sealed secrets are kubeseal output: encrypted, machine-written, and rewritten on every reseal,
+# so their ciphertext trips the generic API-key rule. Plain secrets never live in this repo
+# (Gitleaks scans for those).
+*.sealedsecret.yaml

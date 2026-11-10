@@ -239,7 +239,7 @@ spec:
     metadata:
       labels:
         app: frigate
-    spec:
+    spec:  # nosemgrep: run-as-non-root -- Frigate's image runs as root to use the Intel GPU (/dev/dri) and its s6 init; reviewed.
       nodeSelector:
         kubernetes.io/hostname: worker-02
       automountServiceAccountToken: false
@@ -256,7 +256,7 @@ spec:
             - name: seed
               mountPath: /seed
       containers:
-        - name: frigate
+        - name: frigate  # nosemgrep: allow-privilege-escalation-no-securitycontext -- same reason: Frigate needs root and the GPU device; reviewed.
           image: ghcr.io/blakeblackshear/frigate:0.18.2
           envFrom:
             - secretRef:

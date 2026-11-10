@@ -41,10 +41,10 @@ spec:
     metadata:
       labels:
         app: wyze-bridge
-    spec:
+    spec:  # nosemgrep: run-as-non-root -- vendor image runs as root; scaled to 0 (paused); reviewed.
       nodeSelector:
         kubernetes.io/hostname: worker-02
-      hostNetwork: true
+      hostNetwork: true  # nosemgrep: hostnetwork-pod -- Wyze TUTK discovery needs the node's IOT Wi-Fi leg; worker-02 nftables guard; reviewed.
       dnsPolicy: ClusterFirstWithHostNet
       automountServiceAccountToken: false
       containers:

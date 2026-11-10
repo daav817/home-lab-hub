@@ -20,7 +20,7 @@ spec:
     metadata:
       labels:
         app: intel-gpu-plugin
-    spec:
+    spec:  # nosemgrep: run-as-non-root -- the device plugin must run as root to register /dev/dri with the kubelet; reviewed.
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/hostname: worker-02

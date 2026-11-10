@@ -198,11 +198,11 @@ spec:
     metadata:
       labels:
         app: home-assistant
-    spec:
+    spec:  # nosemgrep: run-as-non-root -- the Home Assistant image runs as root (s6 init); reviewed.
       # A fixed node gives Home Assistant a fixed address on the home network.
       nodeSelector:
         kubernetes.io/hostname: worker-02
-      hostNetwork: true
+      hostNetwork: true  # nosemgrep: hostnetwork-pod -- LAN device discovery (mDNS/SSDP) and a fixed address need the host network; reviewed.
       dnsPolicy: ClusterFirstWithHostNet
       automountServiceAccountToken: false
       initContainers:
@@ -263,7 +263,7 @@ spec:
             - name: seed
               mountPath: /seed
       containers:
-        - name: home-assistant
+        - name: home-assistant  # nosemgrep: allow-privilege-escalation-no-securitycontext -- Home Assistant container, same root image; reviewed.
           image: ghcr.io/home-assistant/home-assistant:2026.10.4
           env:
             - name: TZ
