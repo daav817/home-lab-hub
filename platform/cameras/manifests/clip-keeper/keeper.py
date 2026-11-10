@@ -609,7 +609,7 @@ class Keeper:
         async with ClientSession() as http:
             self.http = http
             self.storage = Storage(http)
-            runner = web.AppRunner(self.routes())
+            runner = web.AppRunner(self.routes(), access_log=None)  # health checks every 15 s would bury the log
             await runner.setup()
             await web.TCPSite(runner, "0.0.0.0", 8080).start()
             log.info("API on :8080; labels %s; cameras on by default: %s", ",".join(sorted(LABELS)), ",".join(sorted(DEFAULT_CAMERAS)))
