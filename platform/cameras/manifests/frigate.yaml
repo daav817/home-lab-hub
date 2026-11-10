@@ -379,6 +379,14 @@ spec:
           protocol: TCP
         - port: 8554
           protocol: TCP
+    # The clip keeper reads the camera list and saves clips through the API.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: clip-keeper
+      ports:
+        - port: 5000
+          protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

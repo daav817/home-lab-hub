@@ -13,6 +13,9 @@ resources:
   - wyze-bridge.sealedsecret.yaml
   - wyze-bridge-web.sealedsecret.yaml
   - blink-mqtt.sealedsecret.yaml
+  - clip-keeper.yaml
+  - clip-keeper-mqtt.sealedsecret.yaml
+  - clip-keeper-api.sealedsecret.yaml
 # The bridge's code and go2rtc settings. A change here gets a new name, which restarts the pod.
 configMapGenerator:
   - name: blink-bridge-code
@@ -21,3 +24,10 @@ configMapGenerator:
       - blink-bridge/bridge.py
       - blink-bridge/requirements.txt
       - blink-bridge/go2rtc.yaml
+  # The clip keeper's code. It uses the Blink bridge's package list (same hash-checked packages).
+  - name: clip-keeper-code
+    namespace: cameras
+    files:
+      - clip-keeper/keeper.py
+      - clip-keeper/clip_logic.py
+      - requirements.txt=blink-bridge/requirements.txt

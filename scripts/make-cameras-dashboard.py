@@ -125,6 +125,30 @@ tiles = [garage, basement,
          *blink("front_door", "Front Door", live="front_door_live"),
          *blink("front_porch_and_swings", "Front Porch", live="front_porch_live")]
 
+# Saving clips to the router (clip keeper). Recording is on while Away is on OR the schedule is
+# on. Cameras added to Frigate later get their own switch automatically: they appear on the
+# "Camera clips" device page and in the hub's Recordings settings (add them here too to show
+# them on this card).
+CLIP_CAMERAS = ["garage", "basement", "parking_lot"]
+recording = {
+    "type": "entities", "title": "Recording to the router", "state_color": True,
+    "entities": [
+        {"entity": "switch.camera_clips_away_recording", "name": "Away (record now)"},
+        {"entity": "sensor.camera_clips_recording", "name": "Recording"},
+        {"entity": "schedule.camera_recording", "name": "Schedule"},
+        {"type": "section", "label": "Cameras that record"},
+        *[{"entity": f"switch.camera_clips_{c}_clips"} for c in CLIP_CAMERAS],
+        {"type": "section", "label": "Storage"},
+        {"entity": "sensor.camera_clips_storage_used", "name": "Used"},
+        {"entity": "number.camera_clips_storage_limit", "name": "Limit"},
+        {"entity": "sensor.camera_clips_clips", "name": "Clips saved"},
+        {"entity": "sensor.camera_clips_storage_status", "name": "Status"},
+        {"type": "weblink", "name": "Open Recordings (play, group, delete)", "icon": "mdi:filmstrip",
+         "url": "https://hub.energiapower.llc/recordings"},
+    ],
+}
+tiles.append(recording)
+
 config = {"views": [
     {"title": "All cameras", "path": "all", "type": "panel",
      "cards": [{"type": "grid", "columns": COLUMNS, "square": False, "cards": copy.deepcopy(tiles)}]},

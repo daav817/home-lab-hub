@@ -33,6 +33,11 @@ const migrations = [
      ('ArgoCD', 'Deployments. Home network only', 'https://argocd.192.168.1.243.nip.io', 'http://argocd-server.argocd.svc.cluster.local/healthz', 'Admin', 'admin', 70),
      ('Grafana', 'Cluster dashboards', 'https://grafana.energiapower.llc', 'http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health', 'Admin', 'admin', 80),
      ('Authentik', 'Users, invites and login settings', 'https://auth.energiapower.llc', 'http://authentik-server.authentik.svc.cluster.local/-/health/live/', 'Admin', 'admin', 90)`,
+  // Camera clips saved to the router (clip keeper). Status checks the keeper's health endpoint.
+  `insert into apps (name, description, url, status_url, category, audience, sort_order) values
+     ('Recordings', 'Camera clips: play, group, delete', 'https://hub.energiapower.llc/recordings',
+      'http://clip-keeper.cameras.svc.cluster.local:8080/healthz', 'Home', 'family', 110)
+   on conflict (name) do nothing`,
 ];
 
 export async function migrate() {

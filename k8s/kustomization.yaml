@@ -10,6 +10,7 @@ resources:
   - ingress.yaml
   - hub-auth.sealedsecret.yaml
   - hub-db.sealedsecret.yaml
+  - hub-clips.sealedsecret.yaml
   - postgres.yaml
 images:
   - name: ghcr.io/daav817/home-lab-hub

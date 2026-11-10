@@ -1,0 +1,240 @@
+# Clip keeper: saves 10-60 second clips of people, cars and animals to the router's camera-clips
+# share while recording is on (Away switch or schedule in Home Assistant), for the cameras that
+# are switched on. Keeps the share under its size limit and gives the hub's Recordings page an
+# API. See clip-keeper/keeper.py.
+#
+# Storage: an rclone sidecar serves the share (SMB on the router) as WebDAV on 127.0.0.1:8090,
+# so the keeper needs no SMB code. Credentials come from the sealed secret camera-clips-smb
+# (scripts/seal-camera-clips.ps1). Until that exists the keeper runs and reports
+# "Not configured or unreachable".
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clip-keeper-data
+  namespace: cameras
+  labels:
+    # The clip index and the groups you make are kept nightly with the other important data.
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/critical-data: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clip-keeper
+  namespace: cameras
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: clip-keeper
+  template:
+    metadata:
+      labels:
+        app: clip-keeper
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The same hash-checked packages as the Blink bridge (aiohttp, aiomqtt).
+        - name: packages
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command:
+            - sh
+            - -c
+            - pip install --quiet --no-cache-dir --disable-pip-version-check --require-hashes --target /deps -r /app/requirements.txt
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext: &locked
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: code
+              mountPath: /app
+            - name: deps
+              mountPath: /deps
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: keeper
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command: ["python", "/app/keeper.py"]
+          env:
+            - name: PYTHONPATH
+              value: /deps:/app
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HOME
+              value: /tmp
+            - name: TZ
+              value: America/New_York
+            # Cameras switched on for clips at first start; others (and new cameras added to
+            # Frigate later) start off and can be switched on in Home Assistant or the hub.
+            - name: DEFAULT_CAMERAS
+              value: garage,basement,parking_lot_live
+            # Detections that make a clip. Frigate tracks these animals: dog, cat.
+            - name: LABELS
+              value: person,car,dog,cat
+            - name: LIMIT_DEFAULT_GB
+              value: "100"
+            - name: LIMIT_MAX_GB
+              value: "500"
+            - name: MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clip-keeper-mqtt
+                  key: MQTT_PASSWORD
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: clip-keeper-api
+                  key: CLIPS_API_TOKEN
+          ports:
+            - name: api
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              # Clips (up to about 25 MB each) are held in memory while they're uploaded.
+              memory: 384Mi
+          securityContext: *locked
+          volumeMounts:
+            - name: code
+              mountPath: /app
+            - name: deps
+              mountPath: /deps
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+        # Serves the router's camera-clips share as WebDAV, on this pod only.
+        - name: storage
+          image: rclone/rclone:1.69.1
+          command:
+            - sh
+            - -c
+            - |
+              if [ -z "$SMB_PASSWORD" ]; then
+                echo "No camera-clips-smb secret yet: run scripts/seal-camera-clips.ps1. Clips won't be saved until then."
+                exec sleep 2147483647
+              fi
+              export RCLONE_CONFIG_ROUTER_PASS="$(rclone obscure "$SMB_PASSWORD")"
+              exec rclone serve webdav "router:$SMB_SHARE" --addr 127.0.0.1:8090 --dir-cache-time 30s --log-level NOTICE
+          env:
+            - name: HOME
+              value: /tmp
+            - name: RCLONE_CONFIG
+              value: /tmp/rclone.conf
+            - name: RCLONE_CONFIG_ROUTER_TYPE
+              value: smb
+            - name: RCLONE_CONFIG_ROUTER_HOST
+              value: 192.168.1.1
+            - name: SMB_SHARE
+              value: camera-clips
+            - name: RCLONE_CONFIG_ROUTER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: camera-clips-smb
+                  key: SMB_USER
+                  optional: true
+            - name: SMB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: camera-clips-smb
+                  key: SMB_PASSWORD
+                  optional: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          securityContext: *locked
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: code
+          configMap:
+            name: clip-keeper-code
+        - name: deps
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: data
+          persistentVolumeClaim:
+            claimName: clip-keeper-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clip-keeper
+  namespace: cameras
+spec:
+  selector:
+    app: clip-keeper
+  ports:
+    - name: api
+      port: 8080
+      targetPort: api
+---
+# Only the hub may call the API (it also needs the token).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clip-keeper
+  namespace: cameras
+spec:
+  podSelector:
+    matchLabels:
+      app: clip-keeper
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: hub
+      ports:
+        - port: 8080
+          protocol: TCP

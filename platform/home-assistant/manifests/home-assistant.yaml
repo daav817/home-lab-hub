@@ -46,6 +46,33 @@ data:
     </svg>
 
   # Copied to /config/packages/ on every start.
+  camera_recording.yaml: |
+    # Camera clips are saved while the Away switch (switch.camera_clips_away_recording, from the
+    # clip keeper) is on OR the schedule helper schedule.camera_recording is on. Create that
+    # helper once in Settings > Devices & services > Helpers > Schedule, named exactly
+    # "Camera recording". This automation tells the clip keeper whenever the schedule changes;
+    # until the helper exists it reports "off".
+    automation:
+      - id: camera_recording_schedule_to_clip_keeper
+        alias: Camera recording schedule, tell the clip keeper
+        mode: queued
+        triggers:
+          - trigger: state
+            entity_id: schedule.camera_recording
+          - trigger: homeassistant
+            event: start
+          - trigger: time_pattern
+            minutes: "/5"
+          - trigger: mqtt
+            topic: clips/status
+            payload: online
+        actions:
+          - action: mqtt.publish
+            data:
+              topic: clips/schedule
+              payload: "{{ 'on' if is_state('schedule.camera_recording', 'on') else 'off' }}"
+              retain: true
+
   parking_lot_alert.yaml: |
     # Plays a chime in every browser registered with Browser Mod (and shows a short note) when
     # Frigate sees a person or a car in the Parking Lot. Switch it on or off with
@@ -191,6 +218,7 @@ spec:
               mkdir -p /config/www
               cp /seed/camera-loading.svg /config/www/camera-loading.svg
               cp /seed/parking_lot_alert.yaml /config/packages/parking_lot_alert.yaml
+              cp /seed/camera_recording.yaml /config/packages/camera_recording.yaml
               mkdir -p /config/www/sounds
               cp /seed/parking-alert.wav /config/www/sounds/parking-alert.wav
               [ -f /config/automations.yaml ] || echo '[]' > /config/automations.yaml

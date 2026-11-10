@@ -35,6 +35,14 @@ data:
     topic readwrite blink/#
     topic write homeassistant/#
     topic read homeassistant/status
+
+    # Clip keeper: reads Frigate's detections, owns the clips/ topics (Away switch, cameras,
+    # limit, and the schedule state Home Assistant mirrors there).
+    user clipkeeper
+    topic read frigate/#
+    topic readwrite clips/#
+    topic write homeassistant/#
+    topic read homeassistant/status
 ---
 # Keeps retained messages, such as the device announcements Home Assistant reads, across restarts.
 apiVersion: v1
@@ -96,11 +104,14 @@ spec:
               mosquitto_passwd -b /mosquitto/run/passwd frigate "$FRIGATE_PASSWORD"
               mosquitto_passwd -b /mosquitto/run/passwd neolink "$NEOLINK_PASSWORD"
               mosquitto_passwd -b /mosquitto/run/passwd blink "$BLINK_PASSWORD"
+              mosquitto_passwd -b /mosquitto/run/passwd clipkeeper "$CLIPKEEPER_PASSWORD"
           envFrom:
             - secretRef:
                 name: mqtt-users
             - secretRef:
                 name: mqtt-blink
+            - secretRef:
+                name: mqtt-clipkeeper
           securityContext: &locked
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

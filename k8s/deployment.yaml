@@ -33,11 +33,17 @@ spec:
               value: https://auth.energiapower.llc/application/o/home-lab-hub/
             - name: NODE_EXTRA_CA_CERTS
               value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            # Recordings page: the clip keeper's API (cameras namespace) and its token.
+            - name: CLIPS_API_URL
+              value: http://clip-keeper.cameras.svc.cluster.local:8080
           envFrom:
             - secretRef:
                 name: hub-auth
             - secretRef:
                 name: hub-db
+            - secretRef:
+                name: hub-clips
+                optional: true
           ports:
             - name: http
               containerPort: 3000
