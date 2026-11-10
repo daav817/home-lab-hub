@@ -29,6 +29,8 @@ RUN adduser --system --uid 1001 nextjs
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-*
 
 COPY --from=builder /app/public ./public
+# Help panel documents (src/lib/help-docs.ts lists them).
+COPY --from=builder /app/help ./help
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

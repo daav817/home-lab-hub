@@ -7,6 +7,8 @@ import { healthWarning } from "@/lib/cluster-health";
 import { listManagedApps } from "@/lib/db";
 import { AppSearch } from "./app-search";
 import { AppTile } from "./app-tile";
+import { HelpButton } from "./help-button";
+import { visibleHelpDocs } from "@/lib/help-docs";
 import { AutoRefresh } from "./auto-refresh";
 import { SignOutButton } from "./sign-out-button";
 
@@ -49,6 +51,9 @@ async function Portal() {
               Manage apps
             </Link>
           )}
+          <HelpButton
+            docs={visibleHelpDocs(user.level).map(({ slug, title, description, updated }) => ({ slug, title, description, updated }))}
+          />
           <SignOutButton />
         </span>
       </div>

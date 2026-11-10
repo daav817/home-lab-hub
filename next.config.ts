@@ -22,13 +22,18 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
         ],
+      },
+      // No framing anywhere, except the Help PDFs (/api/help/...), which the Help panel shows
+      // in a frame on the hub itself; that route sends X-Frame-Options: SAMEORIGIN.
+      {
+        source: "/((?!api/help/).*)",
+        headers: [{ key: "X-Frame-Options", value: "DENY" }],
       },
     ];
   },
