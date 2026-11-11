@@ -161,13 +161,16 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
             onClick={() => {
               const folders = chosen.filter((e) => e.isDir).length;
               const warning = folders ? ` ${folders} of them ${folders === 1 ? "is a folder" : "are folders"}: everything inside goes too.` : "";
-              if (window.confirm(`Delete ${chosen.length} item${chosen.length === 1 ? "" : "s"} from the router?${warning} Only the share's Recycle Bin (if it's on in SRM) can bring them back.`)) {
+              if (window.confirm(`Move ${chosen.length} item${chosen.length === 1 ? "" : "s"} to the Trash?${warning} You can restore them from Trash for 30 days.`)) {
                 run(() => deleteEntries(chosen.map((e) => ({ path: joinPath(pathOf(e)), isDir: e.isDir }))));
               }
             }}
           >
             Delete
           </button>
+          <Link href="/manage/trash" className="text-sm underline">
+            Trash
+          </Link>
           {message.error && <span role="alert" className="text-sm text-(--down)">{message.error}</span>}
           {message.done && <span className="text-sm text-(--up)">{message.done}</span>}
         </div>

@@ -43,6 +43,16 @@ const migrations = [
      ('Files', 'Router drives: photos, videos, music and shared files', 'https://hub.energiapower.llc/files',
       null, 'Home', 'family', 120)
    on conflict (name) do nothing`,
+  // Router files deleted through the hub wait in <share>/.hub-trash/<id>/ (src/lib/trash.ts).
+  `create table file_trash (
+     id text primary key,
+     share text not null,
+     original text not null,
+     is_dir boolean not null,
+     size bigint not null default 0,
+     deleted_by text not null,
+     deleted_at timestamptz not null default now()
+   )`,
 ];
 
 export async function migrate() {

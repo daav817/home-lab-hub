@@ -21,11 +21,16 @@ export function canViewFiles(level: AccessLevel) {
 
 const BAD_NAME = /[\\/:*?"<>|\u0000-\u001f]/;
 
+// Deleted items wait in this folder at the top of their share (src/lib/trash.ts). It never
+// appears in listings and can't be reached by any path from a URL or a form.
+export const TRASH_FOLDER = ".hub-trash";
+
 // One file or folder name as SMB accepts it: no separators or reserved characters, not "." or
 // "..", no trailing dot or space (Windows can't open those), at most 255 characters.
 export function cleanName(raw: string): string | null {
   const name = raw.trim();
   if (!name || name.length > 255 || name === "." || name === ".." || BAD_NAME.test(name) || /[. ]$/.test(name)) return null;
+  if (name.toLowerCase() === TRASH_FOLDER) return null;
   return name;
 }
 
@@ -172,7 +177,7 @@ export function toEntries(items: RcItem[]): Entry[] {
       // SMB folders have no useful time (rclone reports 2000-01-01 for shares)
       modified: i.ModTime && !i.ModTime.startsWith("2000-01-01") ? i.ModTime : null,
     }))
-    .filter((e) => !e.name.startsWith("#recycle") && !e.name.startsWith("@") && e.name !== "desktop.ini")
+    .filter((e) => !e.name.startsWith("#recycle") && !e.name.startsWith("@") && e.name !== "desktop.ini" && e.name.toLowerCase() !== TRASH_FOLDER)
     .sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -303,7 +308,18 @@ export async function exists(path: FilePath): Promise<boolean> {
   }
 }
 
-// WebDAV MOVE renames files and folders alike, within one share.
+export async function removeEmptyFolder(path: FilePath) {
+  await rc("operations/rmdir", { fs: remote(path.share), remote: path.parts.join("/") });
+}
+
+// Size in bytes of a file (folders report -1, so 0 here).
+export async function fileSize(path: FilePath): Promise<number> {
+  const result = await rc<{ item: { Size?: number; IsDir?: boolean } | null }>("operations/stat", { fs: remote(path.share), remote: path.parts.join("/") });
+  return result.item && !result.item.IsDir ? Math.max(0, result.item.Size ?? 0) : 0;
+}
+
+// WebDAV MOVE renames and moves files and folders alike, within one share (the router does it
+// in place, so even a large folder moves at once).
 export async function rename(from: FilePath, to: FilePath) {
   const response = await fetch(webdavUrl(from), {
     method: "MOVE",

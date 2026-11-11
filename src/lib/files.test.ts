@@ -94,3 +94,12 @@ describe("listings", () => {
     expect(entries[0]).toEqual({ name: "Trips", isDir: true, size: 0, modified: null });
   });
 });
+
+describe("the Trash folder", () => {
+  it("can't be named, reached by a path, or seen in a listing", () => {
+    expect(cleanName(".hub-trash")).toBeNull();
+    expect(cleanName(".HUB-TRASH")).toBeNull();
+    expect(parsePath("photo/.hub-trash/123")).toBeNull();
+    expect(toEntries([{ Name: ".hub-trash", IsDir: true, Size: -1 }, { Name: "a.jpg", IsDir: false, Size: 1 }]).map((e) => e.name)).toEqual(["a.jpg"]);
+  });
+});

@@ -3,8 +3,9 @@
 import { requireAdmin } from "@/lib/access";
 import { recordAudit } from "@/lib/db";
 import {
-  assertShare, cleanName, deleteEntry, exists, FilesError, joinPath, makeFolder, parentOf, parsePath, rename,
+  assertShare, cleanName, exists, FilesError, joinPath, makeFolder, parentOf, parsePath, rename,
 } from "@/lib/files";
+import { deleteForever, describe, listTrash, moveToTrash, restore } from "@/lib/trash";
 
 export type FileActionState = { error?: string; done?: string };
 
@@ -56,12 +57,45 @@ export async function deleteEntries(items: { path: string; isDir: boolean }[]): 
     // Never a whole share: only things inside one.
     if (paths.some((p) => !p.path || p.path.parts.length === 0)) return { error: "That can't be deleted here." };
     for (const share of new Set(paths.map((p) => p.path!.share))) await assertShare(share);
-    let deleted = 0;
+    let moved = 0;
     for (const { path, isDir } of paths) {
-      await deleteEntry(path!, isDir);
-      await recordAudit(user.name, isDir ? "files.delete-folder" : "files.delete", joinPath(path!));
-      deleted++;
+      const item = await moveToTrash(path!, isDir, user.name);
+      await recordAudit(user.name, "files.trash", joinPath(path!), { trashId: item.id, isDir });
+      moved++;
     }
-    return { done: `Deleted ${deleted} item${deleted === 1 ? "" : "s"}.` };
+    return { done: `Moved ${moved} item${moved === 1 ? "" : "s"} to the Trash.` };
+  });
+}
+
+// --- Trash (Manage > Trash) ---
+
+export async function restoreFromTrash(id: string): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const item = await restore(id);
+    await recordAudit(user.name, "files.restore", describe(item), { trashId: id });
+    return { done: `Restored ${describe(item)}.` };
+  });
+}
+
+export async function deleteFromTrash(id: string): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const item = await deleteForever(id);
+    await recordAudit(user.name, "files.delete-forever", describe(item), { trashId: id });
+    return { done: `Deleted ${describe(item)} for good.` };
+  });
+}
+
+export async function emptyTrash(): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    let count = 0;
+    for (const item of await listTrash()) {
+      await deleteForever(item.id);
+      await recordAudit(user.name, "files.delete-forever", describe(item), { trashId: item.id });
+      count++;
+    }
+    return { done: `Emptied the Trash (${count} item${count === 1 ? "" : "s"}).` };
   });
 }
