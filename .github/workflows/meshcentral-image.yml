@@ -50,11 +50,16 @@ jobs:
           load: true
           tags: meshcentral:scan
 
+      # Each finding is also written as an annotation, so it shows on the run's summary page.
       - name: Scan image for known vulnerabilities (Trivy)
         run: |
           docker save meshcentral:scan -o image.tar
-          docker run --rm -v "$PWD/image.tar:/image.tar:ro" aquasec/trivy:0.76.1 \
-            image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+          mkdir -p scan
+          docker run --rm -v "$PWD/image.tar:/image.tar:ro" -v "$PWD/scan:/scan" aquasec/trivy:0.76.1 \
+            image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --format json --output /scan/trivy.json
+          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]? |
+            "::error title=\(.VulnerabilityID)::\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion) (\(.Severity)) in \(.PkgPath // $t)"' scan/trivy.json
+          test "$(jq '[.Results[]?.Vulnerabilities[]?] | length' scan/trivy.json)" -eq 0
 
       - name: Push to GHCR
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
