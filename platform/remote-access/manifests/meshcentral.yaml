@@ -28,6 +28,7 @@ data:
         "port": 8080,
         "aliasPort": 443,
         "redirPort": 0,
+        "mpsPort": 0,
         "tlsOffload": true,
         "sessionSecure": true,
         "WANonly": true,
@@ -120,6 +121,9 @@ spec:
     metadata:
       labels:
         app: meshcentral
+      annotations:
+        # config.json is written at start: bump this with any change to meshcentral-config.
+        meshcentral/config-rev: "2"
     spec:
       imagePullSecrets:
         - name: ghcr-pull-secret
