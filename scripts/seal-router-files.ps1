@@ -50,6 +50,7 @@ function Seal($name, $values) {
 
 $user = (Read-Hidden "Router user for the hub's Files page (e.g. hubfiles)").Trim()
 $password = Read-Hidden "That user's password"
+if ($password -ne (Read-Hidden "The password again")) { throw "The two passwords didn't match. Nothing was saved." }
 Seal "hub-router" ([ordered]@{ SMB_USER = $user; SMB_PASSWORD = $password })
 
 $bytes = New-Object byte[] 32
