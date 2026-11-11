@@ -105,7 +105,7 @@ export async function emptyExpired(now = new Date()): Promise<TrashItem[]> {
     try {
       removed.push(await deleteForever(id));
     } catch (error) {
-      console.error(`Trash: couldn't empty ${id}`, error);
+      console.error("Trash: couldn't empty item %s", id, error);
     }
   }
   return removed;
