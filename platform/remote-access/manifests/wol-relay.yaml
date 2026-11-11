@@ -1,0 +1,155 @@
+# Wake-on-LAN relay. A sleeping PC can only be woken by a "magic packet" broadcast on the home
+# network, and pods sit on the cluster's own network, so this one small helper runs on
+# worker-01's host network and sends the packet for the hub (Manage > Computers > Wake).
+#
+# - Needs a token (sealed wol-relay secret; the hub has the same one): anyone else on the LAN
+#   gets 401. It can only send wake packets; it reads nothing and changes nothing.
+# - Pinned to worker-01: worker-02 is also on the IOT Wi-Fi, which must never get broadcasts.
+# - Sends to 192.168.1.255 (the home network only), ports 9 and 7.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wol-relay
+data:
+  wol.py: |
+    import hmac, json, os, re, socket
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    TOKEN = os.environ["WOL_TOKEN"]
+    BROADCAST = os.environ.get("WOL_BROADCAST", "192.168.1.255")
+    BIND = os.environ.get("WOL_BIND", "127.0.0.1")
+    PORT = int(os.environ.get("WOL_PORT", "9009"))
+    MAC = re.compile(r"^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$", re.I)
+
+
+    def magic_packet(mac):
+        return b"\xff" * 6 + bytes.fromhex(re.sub("[:-]", "", mac)) * 16
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def reply(self, status, body):
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == "/healthz":
+                return self.reply(200, {"ok": True})
+            self.reply(404, {"error": "not found"})
+
+        def do_POST(self):
+            if self.path != "/wake":
+                return self.reply(404, {"error": "not found"})
+            if not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + TOKEN):
+                return self.reply(401, {"error": "unauthorized"})
+            try:
+                length = min(int(self.headers.get("Content-Length") or 0), 1024)
+                mac = str(json.loads(self.rfile.read(length) or b"{}").get("mac", ""))
+            except (ValueError, json.JSONDecodeError):
+                return self.reply(400, {"error": "bad request"})
+            if not MAC.match(mac):
+                return self.reply(400, {"error": "bad MAC address"})
+            packet = magic_packet(mac)
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                for port in (9, 7):
+                    s.sendto(packet, (BROADCAST, port))
+            print(f"wake sent to {mac.lower()} via {BROADCAST}", flush=True)
+            self.reply(200, {"sent": True})
+
+        def log_message(self, *args):
+            pass  # one line per wake above; no request noise
+
+
+    if __name__ == "__main__":
+        print(f"WoL relay on {BIND}:{PORT}, broadcasting to {BROADCAST}", flush=True)
+        ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wol-relay
+  labels:
+    app: wol-relay
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # the host port can only be held once
+  selector:
+    matchLabels:
+      app: wol-relay
+  template:
+    metadata:
+      labels:
+        app: wol-relay
+    spec:
+      hostNetwork: true  # nosemgrep: hostnetwork-pod -- a magic packet must be broadcast on the home LAN, which only the host network reaches; token-protected, send-only; reviewed.
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: worker-01
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wol-relay
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command: ["python", "-u", "/app/wol.py"]
+          env:
+            - name: WOL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: wol-relay
+                  key: WOL_TOKEN
+            # Listen on the node's home-network address only (the hub reaches it there).
+            - name: WOL_BIND
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: WOL_BROADCAST
+              value: "192.168.1.255"
+            - name: WOL_PORT
+              value: "9009"
+          ports:
+            - name: http
+              containerPort: 9009
+          readinessProbe:
+            tcpSocket:
+              port: 9009
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 5m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: wol-relay
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wol-relay
+spec:
+  selector:
+    app: wol-relay
+  ports:
+    - name: http
+      port: 9009
+      targetPort: 9009

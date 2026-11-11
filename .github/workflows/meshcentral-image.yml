@@ -1,0 +1,81 @@
+name: Build MeshCentral image
+
+# Builds platform/remote-access/image (official MeshCentral + pinned login modules), scans it,
+# pushes it to GHCR and pins the tag in platform/remote-access/manifests/kustomization.yaml.
+# Argo CD (app "remote-access") rolls it out.
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - "platform/remote-access/image/**"
+      - ".github/workflows/meshcentral-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: meshcentral-image
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Version tag
+        id: version
+        run: |
+          BASE=$(grep -oP 'meshcentral:\K[0-9.]+(?=@)' platform/remote-access/image/Dockerfile)
+          echo "TAG=${BASE}-hub.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: platform/remote-access/image
+          load: true
+          tags: meshcentral:scan
+
+      - name: Scan image for known vulnerabilities (Trivy)
+        run: |
+          docker save meshcentral:scan -o image.tar
+          docker run --rm -v "$PWD/image.tar:/image.tar:ro" aquasec/trivy:0.76.1 \
+            image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+
+      - name: Push to GHCR
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: platform/remote-access/image
+          push: true
+          tags: ghcr.io/daav817/meshcentral:${{ steps.version.outputs.TAG }}
+
+      - name: Pin new image tag in manifests
+        run: |
+          sed -i "s/newTag: .*/newTag: \"${{ steps.version.outputs.TAG }}\"/" platform/remote-access/manifests/kustomization.yaml
+
+      - name: Commit and push manifest update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add platform/remote-access/manifests/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: deploy meshcentral ${{ steps.version.outputs.TAG }} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

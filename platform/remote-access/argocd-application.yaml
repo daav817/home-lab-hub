@@ -1,0 +1,23 @@
+# Applied once by hand: kubectl apply -f platform/remote-access/argocd-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: remote-access
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/daav817/home-lab-hub.git
+    targetRevision: main
+    path: platform/remote-access/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: remote-access
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

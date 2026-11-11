@@ -13,6 +13,7 @@ resources:
   - hub-clips.sealedsecret.yaml
   - hub-metrics.sealedsecret.yaml
   - hub-router.sealedsecret.yaml
+  - hub-wol.sealedsecret.yaml
   - postgres.yaml
   - monitoring.yaml
 images:

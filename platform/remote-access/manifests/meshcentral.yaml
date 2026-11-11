@@ -1,0 +1,285 @@
+# MeshCentral: open the home PCs' desktops (and terminal, files) in a browser, from anywhere.
+#
+# How it fits together:
+# - Each PC runs the MeshCentral agent, which keeps an outgoing connection to
+#   https://mesh.energiapower.llc (Cloudflare tunnel -> Traefik -> here). Nothing on the router is
+#   opened, and the PCs need no inbound ports.
+# - Login is Authentik only (OIDC, admins only, and a fresh 2FA code at every sign-in: see the
+#   meshcentral provider in platform/authentik/manifests/blueprints.yaml). Local password login
+#   is hidden and new local accounts are off. Traefik can't put Authentik in front of the whole
+#   site like Longhorn, because the agents can't sign in through a browser.
+# - Cloudflare terminates TLS, so MeshCentral serves plain HTTP on 8080 inside the cluster and
+#   only Traefik may reach it (NetworkPolicy below).
+# - Desktop, terminal and file sessions are recorded to their own volume for 30 days (10 GB cap),
+#   and MeshCentral's own event log lists who connected to what and when.
+# - Its database, certificates and settings are on meshcentral-data, backed up nightly.
+#
+# config.json is written at start from the ConfigMap plus the sealed secrets (client secret,
+# session key), so no secret is ever in git in plain text.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meshcentral-config
+data:
+  config.json: |
+    {
+      "settings": {
+        "cert": "mesh.energiapower.llc",
+        "port": 8080,
+        "aliasPort": 443,
+        "redirPort": 0,
+        "tlsOffload": true,
+        "sessionSecure": true,
+        "WANonly": true,
+        "agentPing": 60,
+        "browserPing": 60,
+        "ignoreAgentHashCheck": true,
+        "selfUpdate": false,
+        "plugins": { "enabled": false },
+        "allowFraming": false,
+        "sessionKey": "SET_AT_START"
+      },
+      "domains": {
+        "": {
+          "title": "Home Lab Remote Desktop",
+          "newAccounts": false,
+          "showPasswordLogin": false,
+          "authStrategies": {
+            "oidc": {
+              "issuer": { "issuer": "https://auth.energiapower.llc/application/o/meshcentral/" },
+              "client": {
+                "client_id": "meshcentral",
+                "client_secret": "SET_AT_START",
+                "redirect_uri": "https://mesh.energiapower.llc/auth-oidc-callback"
+              },
+              "custom": { "scope": "openid profile email", "buttonText": "Sign in with Home Lab" },
+              "groups": {
+                "claim": "groups",
+                "scope": "profile",
+                "required": ["authentik Admins"],
+                "siteadmin": ["authentik Admins"],
+                "revokeAdmin": true
+              },
+              "newAccounts": true
+            }
+          },
+          "sessionRecording": {
+            "filepath": "/opt/meshcentral/meshcentral-recordings",
+            "index": true,
+            "maxRecordingDays": 30,
+            "maxRecordingSizeMegabytes": 10000,
+            "protocols": [1, 2, 5, 6, 8, 9]
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meshcentral-data
+  labels:
+    # Devices, users, settings and the server's identity (agents trust it by its certificate).
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/critical-data: enabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Session recordings: kept 30 days, oldest removed past 10 GB. Not in the nightly backup.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meshcentral-recordings
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 12Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meshcentral
+  labels:
+    app: meshcentral
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one writer for the volumes
+  selector:
+    matchLabels:
+      app: meshcentral
+  template:
+    metadata:
+      labels:
+        app: meshcentral
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      initContainers:
+        # Fills the secrets into config.json (jq is in the image).
+        - name: config
+          image: ghcr.io/daav817/meshcentral
+          command:
+            - sh
+            - -c
+            - >-
+              jq --arg cs "$OIDC_CLIENT_SECRET" --arg sk "$SESSION_KEY"
+              '.settings.sessionKey = $sk | .domains[""].authStrategies.oidc.client.client_secret = $cs'
+              /template/config.json > /opt/meshcentral/meshcentral-data/config.json
+          env:
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: meshcentral-secrets
+                  key: OIDC_CLIENT_SECRET
+            - name: SESSION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: meshcentral-secrets
+                  key: SESSION_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: template
+              mountPath: /template
+            - name: data
+              mountPath: /opt/meshcentral/meshcentral-data
+              subPath: data
+      containers:
+        - name: meshcentral
+          image: ghcr.io/daav817/meshcentral
+          command: ["node", "/opt/meshcentral/meshcentral/meshcentral", "--configfile", "/opt/meshcentral/meshcentral-data/config.json"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health.ashx
+              port: http
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health.ashx
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /opt/meshcentral/meshcentral-data
+              subPath: data
+            - name: data
+              mountPath: /opt/meshcentral/meshcentral-files
+              subPath: files
+            - name: data
+              mountPath: /opt/meshcentral/meshcentral-backups
+              subPath: backups
+            - name: recordings
+              mountPath: /opt/meshcentral/meshcentral-recordings
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: template
+          configMap:
+            name: meshcentral-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: meshcentral-data
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: meshcentral-recordings
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meshcentral
+spec:
+  selector:
+    app: meshcentral
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Only Traefik (the way in from the Cloudflare tunnel) and the hub's status light reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meshcentral
+spec:
+  podSelector:
+    matchLabels:
+      app: meshcentral
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: hub
+      ports:
+        - port: 8080
+---
+# Public address. No Authentik forward auth here (the agents connect to this same address);
+# MeshCentral itself only accepts Authentik logins.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meshcentral
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mesh.energiapower.llc
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: meshcentral
+                port:
+                  number: 8080

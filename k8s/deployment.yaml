@@ -54,6 +54,11 @@ spec:
               value: k8s-storage-folder,camera-clips
             - name: FILES_STAGING
               value: /staging
+            # Manage > Computers: the Wake-on-LAN relay (platform/remote-access) and MeshCentral.
+            - name: WOL_URL
+              value: http://wol-relay.remote-access.svc.cluster.local:9009
+            - name: MESH_URL
+              value: https://mesh.energiapower.llc
           envFrom:
             - secretRef:
                 name: hub-auth
@@ -65,6 +70,10 @@ spec:
             # METRICS_TOKEN for /api/metrics (from scripts/seal-router-files.ps1)
             - secretRef:
                 name: hub-metrics
+                optional: true
+            # WOL_TOKEN for the Wake-on-LAN relay (from scripts/seal-meshcentral.mjs)
+            - secretRef:
+                name: hub-wol
                 optional: true
           ports:
             - name: http

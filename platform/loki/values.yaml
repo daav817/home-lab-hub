@@ -1,0 +1,46 @@
+# Loki (logs from every pod on all three nodes, shipped by promtail; read in Grafana).
+# Installed by hand with Helm, like the rest of the monitoring stack (not Argo). Apply with:
+#   helm upgrade loki grafana/loki --version 7.3.0 -n monitoring -f platform/loki/values.yaml
+#
+# Retention (added 2026-11-11): logs older than 30 days are deleted by Loki's compactor.
+# Without it Loki kept everything until its 20 GiB disk filled, after which it stops
+# accepting new logs. At ~0.05 GB/day, 30 days is about 1.5 GB.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        index:
+          period: 24h # retention works in whole index periods (days)
+          prefix: index_
+        object_store: filesystem
+        schema: v13
+        store: tsdb
+  storage:
+    type: filesystem
+  limits_config:
+    retention_period: 720h # 30 days
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+    compaction_interval: 10m
+    retention_delete_delay: 2h # grace before marked chunks are really removed
+    retention_delete_worker_count: 50
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: longhorn
+
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0

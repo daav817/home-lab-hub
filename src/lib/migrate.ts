@@ -72,6 +72,19 @@ const migrations = [
      started_at timestamptz not null default now(),
      finished_at timestamptz
    )`,
+  // Home PCs for Wake-on-LAN (Manage > Computers, src/lib/computers.ts).
+  `create table computers (
+     id uuid primary key default gen_random_uuid(),
+     name text not null unique,
+     mac text not null unique,
+     note text not null default '',
+     created_at timestamptz not null default now()
+   )`,
+  // Remote desktop (Phase 5): MeshCentral, admins only.
+  `insert into apps (name, description, url, status_url, category, audience, sort_order) values
+     ('Remote desktop', 'Open the home PCs from anywhere (2FA each time)', 'https://mesh.energiapower.llc',
+      'http://meshcentral.remote-access.svc.cluster.local:8080/health.ashx', 'Admin', 'admin', 95)
+   on conflict (name) do nothing`,
 ];
 
 export async function migrate() {

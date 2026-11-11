@@ -74,6 +74,9 @@ export default function ManagePage() {
           <Link href="/manage/trash" className="underline">
             Trash
           </Link>
+          <Link href="/manage/computers" className="underline">
+            Computers
+          </Link>
           <Link href="/manage/new" className="underline">
             Add app
           </Link>

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Phase 5: remote desktop (MeshCentral) and Wake-on-LAN. Needs ghcr-pull-secret in this
+# namespace (copied from default, never stored in git).
+namespace: remote-access
+resources:
+  - namespace.yaml
+  - meshcentral.yaml
+  - wol-relay.yaml
+  - meshcentral-secrets.sealedsecret.yaml
+  - wol-relay.sealedsecret.yaml
+images:
+  - name: ghcr.io/daav817/meshcentral
+    newTag: "pending-first-build"
