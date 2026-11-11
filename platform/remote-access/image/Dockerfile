@@ -15,8 +15,13 @@ FROM ghcr.io/ylianst/meshcentral:1.3.1@sha256:266b01942545829f11d53e6cecd5c2e480
 RUN apk upgrade --no-cache
 
 WORKDIR /opt/meshcentral/meshcentral
-RUN npm install --no-audit --no-fund --omit=optional --no-save \
-      passport@0.7.0 connect-flash@0.1.1 openid-client@5.7.1 \
+# MeshCentral checks each module's exact version at start and wants to npm-install any
+# mismatch, so its own list is pointed at the patched releases (the build stops if the text
+# it edits ever changes). image-size is needed for indexing session recordings.
+RUN sed -i -e "s/'compression@1.8.1'/'compression@1.8.2'/" -e "s/'node-forge@1.4.0'/'node-forge@1.4.1'/" meshcentral.js \
+ && grep -q "'compression@1.8.2'" meshcentral.js && grep -q "'node-forge@1.4.1'" meshcentral.js \
+ && npm install --no-audit --no-fund --omit=optional --no-save \
+      passport@0.7.0 connect-flash@0.1.1 openid-client@5.7.1 image-size@2.0.2 \
       compression@1.8.2 node-forge@1.4.1 \
  && rm -rf node_modules/mariadb node_modules/mysql2 \
  && npm cache clean --force \
