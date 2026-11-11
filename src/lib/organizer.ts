@@ -10,7 +10,7 @@
 
 import { recordAudit, sql } from "./db";
 import { FilesError, joinPath, makeFolder, parentOf, rc, type FilePath } from "./files";
-import { destination, inSource, mediaKind, monthFolder, organizeConfig, takenMonth } from "./media";
+import { destination, inSource, mediaKind, organizeConfig, takenMonth } from "./media";
 
 export type Trigger = "manual" | "nightly";
 export type RunStatus = "running" | "stopping" | "done" | "stopped" | "failed" | "interrupted";
@@ -140,12 +140,16 @@ async function moveOne(from: FilePath, madeFolders: Set<string>): Promise<{ skip
   const date = takenMonth(name, source.ModTime ?? null);
   if (!date) return { skip: "no date" };
   const to = destination(name, kind, date, config);
-  const there = await stat(to);
-  if (there) {
+  // Older years keep files straight in the year folder (photo/2023/x.jpg), so a copy there
+  // counts as already organized too.
+  for (const place of [to, { share: to.share, parts: [String(date.year), name] }]) {
+    const there = await stat(place);
+    if (!there) continue;
+    const where = joinPath(parentOf(place));
     return {
       skip: there.Size === source.Size
-        ? `already in ${to.share}/${date.year}/${monthFolder(date)} (same size), left here`
-        : `a different file with this name is in ${to.share}/${date.year}/${monthFolder(date)}`,
+        ? `already in ${where} (same size), left here`
+        : `a different file with this name is in ${where}`,
     };
   }
   const folder = joinPath(parentOf(to));
