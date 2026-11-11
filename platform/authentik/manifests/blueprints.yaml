@@ -583,6 +583,63 @@ data:
           group: !KeyOf group-family
           order: 10
 
+      # MeshCentral (remote desktop to the home PCs, platform/remote-access). Its own OIDC login,
+      # admins only, and like Longhorn a fresh 2FA code at every sign-in (same stage, own
+      # flow). MeshCentral also checks the groups claim (from the profile scope) for
+      # "authentik Admins". The client secret is generated here and sealed by
+      # scripts/seal-meshcentral.mjs.
+      - id: meshcentral-authorization
+        model: authentik_flows.flow
+        identifiers:
+          slug: meshcentral-authorization
+        attrs:
+          name: Remote desktop authorization
+          title: Confirm it's you
+          designation: authorization
+          authentication: require_authenticated
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf meshcentral-authorization
+          stage: !KeyOf longhorn-mfa
+          order: 0
+
+      - id: meshcentral-provider
+        model: authentik_providers_oauth2.oauth2provider
+        identifiers:
+          name: meshcentral
+        attrs:
+          client_type: confidential
+          client_id: meshcentral
+          grant_types:
+            - authorization_code
+          authorization_flow: !KeyOf meshcentral-authorization
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://mesh.energiapower.llc/auth-oidc-callback
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+
+      - id: meshcentral-application
+        model: authentik_core.application
+        identifiers:
+          slug: meshcentral
+        attrs:
+          name: Remote desktop
+          provider: !KeyOf meshcentral-provider
+          meta_launch_url: https://mesh.energiapower.llc
+          policy_engine_mode: any
+
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf meshcentral-application
+          group: !Find [authentik_core.group, [name, authentik Admins]]
+          order: 0
+
       # Every provider of this kind must be listed here.
       - model: authentik_outposts.outpost
         identifiers:
