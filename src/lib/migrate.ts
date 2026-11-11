@@ -53,6 +53,25 @@ const migrations = [
      deleted_by text not null,
      deleted_at timestamptz not null default now()
    )`,
+  // Small hub settings changed from the UI (organizer's nightly schedule, ...).
+  `create table settings (
+     key text primary key,
+     value jsonb not null,
+     updated_at timestamptz not null default now()
+   )`,
+  // Runs of the upload-folder organizer (src/lib/organizer.ts).
+  `create table organize_runs (
+     id bigint generated always as identity primary key,
+     trigger text not null,
+     actor text not null,
+     status text not null,
+     total integer not null default 0,
+     moved integer not null default 0,
+     moved_bytes bigint not null default 0,
+     detail jsonb,
+     started_at timestamptz not null default now(),
+     finished_at timestamptz
+   )`,
 ];
 
 export async function migrate() {

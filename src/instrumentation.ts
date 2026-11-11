@@ -17,4 +17,25 @@ export async function register() {
   };
   setInterval(sweep, 3600_000).unref();
   setTimeout(sweep, 60_000).unref();
+
+  // The share list is read once at start and kept fresh, so opening Files never waits for the
+  // router (it takes about 11 s to refuse each share the hub's account can't open).
+  const { listShares } = await import("./lib/files");
+  const warm = () => listShares(true).catch(() => {});
+  void warm();
+  setInterval(warm, 60_000).unref();
+
+  // Upload-folder organizer: a run cut short by a restart is marked so, and the nightly run
+  // is checked for every 5 minutes.
+  const organizer = await import("./lib/organizer");
+  await organizer.markInterrupted().catch((error) => console.error("Organizer: couldn't mark old runs", error));
+  const tick = async () => {
+    try {
+      const run = await organizer.nightlyTick();
+      if (run) await recordAudit("hub", "files.organize-started", `run ${run.id}`, { trigger: "nightly", files: run.total });
+    } catch (error) {
+      console.error("Organizer nightly check failed", error);
+    }
+  };
+  setInterval(tick, 5 * 60_000).unref();
 }

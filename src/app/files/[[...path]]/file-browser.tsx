@@ -1,17 +1,26 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { applyFilters, isFiltered, NO_FILTERS, type Filters } from "@/lib/file-filters";
 import { folderHref, formatBytes, joinPath, previewKind, rawHref, type Entry, type FilePath } from "@/lib/files";
+import { planMoves } from "@/lib/media";
 import { deleteEntries, newFolder, renameEntry, type FileActionState } from "../actions";
+import { organizeSelected } from "../organize-actions";
+import { ConfirmDialog } from "./confirm-dialog";
+import { FilterBar } from "./filter-bar";
+import { OrganizePanel, useOrganizeStatus } from "./organize-panel";
 
 const CHUNK = 8 * 1024 * 1024; // must match CHUNK_BYTES in src/lib/uploads.ts
 const PAGE = 300;
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
-type Props = { folder: FilePath; entries: Entry[]; canManage: boolean };
+// organize: this folder is the phone's upload folder (or inside it) and the viewer is an admin.
+// atSource: it's the upload folder itself (where "Move all" and the nightly setting live).
+type Props = { folder: FilePath; entries: Entry[]; canManage: boolean; organize: boolean; atSource: boolean };
 type Upload = { name: string; sent: number; total: number; error?: string; done?: boolean };
+type Asking = "delete" | "organize" | null;
 
 function icon(entry: Entry) {
   if (entry.isDir) return "📁";
@@ -19,7 +28,6 @@ function icon(entry: Entry) {
     case "image": return "🖼️";
     case "video": return "🎞️";
     case "audio": return "🎵";
-    case "pdf": return "📄";
     default: return "📄";
   }
 }
@@ -61,19 +69,46 @@ async function sendFile(folder: FilePath, file: File, onProgress: (sent: number)
   } while (offset < file.size || file.size === 0);
 }
 
-export function FileBrowser({ folder, entries, canManage }: Props) {
+function NameList({ entries }: { entries: Entry[] }) {
+  const LIMIT = 8;
+  return (
+    <ul className="text-muted flex flex-col gap-0.5">
+      {entries.slice(0, LIMIT).map((e) => (
+        <li key={e.name} className="truncate">
+          {e.isDir ? "📁 " : ""}
+          {e.name}
+          {!e.isDir && ` (${formatBytes(e.size)})`}
+        </li>
+      ))}
+      {entries.length > LIMIT && <li>…and {entries.length - LIMIT} more</li>}
+    </ul>
+  );
+}
+
+export function FileBrowser({ folder, entries, canManage, organize, atSource }: Props) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [shown, setShown] = useState(PAGE);
   const [viewing, setViewing] = useState<Entry | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [message, setMessage] = useState<FileActionState>({});
+  const [asking, setAsking] = useState<Asking>(null);
   const [pending, startTransition] = useTransition();
+  const [status, refreshStatus] = useOrganizeStatus(organize);
+
+  const visible = useMemo(() => applyFilters(entries, filters), [entries, filters]);
+  // Actions only ever apply to ticked items that the filters still show.
+  const chosen = useMemo(() => visible.filter((e) => selected.has(e.name)), [visible, selected]);
+  const chosenBytes = chosen.reduce((n, e) => n + (e.isDir ? 0 : e.size), 0);
+  const visibleBytes = useMemo(() => visible.reduce((n, e) => n + (e.isDir ? 0 : e.size), 0), [visible]);
+  const plan = useMemo(() => (asking === "organize" ? planMoves(chosen) : null), [asking, chosen]);
+  const images = visible.filter((e) => !e.isDir && previewKind(e.name) === "image");
+  const moving = status?.run?.status === "running" || status?.run?.status === "stopping";
+  const allChosen = visible.length > 0 && chosen.length === visible.length;
 
   const pathOf = (entry: Entry) => ({ share: folder.share, parts: [...folder.parts, entry.name] });
-  const images = entries.filter((e) => !e.isDir && previewKind(e.name) === "image");
-  const chosen = entries.filter((e) => selected.has(e.name));
 
   const toggle = (name: string) =>
     setSelected((current) => {
@@ -83,12 +118,14 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
       return next;
     });
 
-  const run = (action: () => Promise<FileActionState>) =>
+  const run = (action: () => Promise<FileActionState>, after?: () => void) =>
     startTransition(async () => {
       const result = await action();
       setMessage(result);
+      setAsking(null);
       if (!result.error) {
         setSelected(new Set());
+        after?.();
         router.refresh();
       }
     });
@@ -123,8 +160,12 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
     if (at >= 0 && images.length > 1) setViewing(images[(at + by + images.length) % images.length]);
   };
 
+  const folders = chosen.filter((e) => e.isDir).length;
+
   return (
     <section className="flex flex-col gap-4">
+      {organize && <OrganizePanel status={status} refresh={refreshStatus} atSource={atSource} entries={entries} />}
+
       {canManage && (
         <div className="panel sticky top-2 z-10 flex flex-wrap items-center gap-3 px-4 py-3">
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
@@ -142,7 +183,9 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
           >
             New folder
           </button>
-          <span className="text-muted text-sm">{selected.size} selected</span>
+          <span className="text-muted text-sm">
+            {chosen.length} selected{chosen.length > 0 && ` · ${formatBytes(chosenBytes)}`}
+          </span>
           <button
             type="button"
             className="btn-quiet"
@@ -154,17 +197,22 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
           >
             Rename
           </button>
+          {organize && (
+            <button
+              type="button"
+              className="btn-quiet"
+              disabled={pending || chosen.length === 0 || moving}
+              title={moving ? "A move is already running" : "Move to Photos / Videos by year and month"}
+              onClick={() => setAsking("organize")}
+            >
+              Move to Photos/Videos
+            </button>
+          )}
           <button
             type="button"
             className="btn-quiet text-(--down)"
             disabled={pending || chosen.length === 0}
-            onClick={() => {
-              const folders = chosen.filter((e) => e.isDir).length;
-              const warning = folders ? ` ${folders} of them ${folders === 1 ? "is a folder" : "are folders"}: everything inside goes too.` : "";
-              if (window.confirm(`Move ${chosen.length} item${chosen.length === 1 ? "" : "s"} to the Trash?${warning} You can restore them from Trash for 30 days.`)) {
-                run(() => deleteEntries(chosen.map((e) => ({ path: joinPath(pathOf(e)), isDir: e.isDir }))));
-              }
-            }}
+            onClick={() => setAsking("delete")}
           >
             Delete
           </button>
@@ -175,6 +223,60 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
           {message.done && <span className="text-sm text-(--up)">{message.done}</span>}
         </div>
       )}
+
+      <FilterBar filters={filters} onChange={(next) => { setFilters(next); setShown(PAGE); }} />
+
+      <ConfirmDialog
+        open={asking === "delete"}
+        title={`Move ${chosen.length} item${chosen.length === 1 ? "" : "s"} to the Trash?`}
+        confirmLabel="Move to Trash"
+        danger
+        busy={pending}
+        onCancel={() => setAsking(null)}
+        onConfirm={() => run(() => deleteEntries(chosen.map((e) => ({ path: joinPath(pathOf(e)), isDir: e.isDir }))))}
+      >
+        <p>
+          {formatBytes(chosenBytes)} in files
+          {folders > 0 && <strong className="text-(--down)">, plus {folders} folder{folders === 1 ? "" : "s"} with everything inside</strong>}.
+          You can restore them from Trash for 30 days; after that they&apos;re gone for good.
+        </p>
+        <NameList entries={chosen} />
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={asking === "organize"}
+        title="Move to Photos and Videos?"
+        confirmLabel={plan ? `Move ${plan.photos + plan.videos} file${plan.photos + plan.videos === 1 ? "" : "s"}` : "Move"}
+        busy={pending || !plan || plan.photos + plan.videos === 0}
+        onCancel={() => setAsking(null)}
+        onConfirm={() => run(() => organizeSelected(chosen.map((e) => joinPath(pathOf(e)))), refreshStatus)}
+      >
+        {plan && (
+          <>
+            <p>
+              <strong>{plan.photos}</strong> photo{plan.photos === 1 ? "" : "s"} (JPG, PNG) go to <strong>photo</strong> and{" "}
+              <strong>{plan.videos}</strong> video{plan.videos === 1 ? "" : "s"} (MP4, AVI) to <strong>video</strong>, each in a{" "}
+              <code>year/year-month</code> folder (like <code>2025/2025-12</code>) by the date in its name. That&apos;s{" "}
+              {formatBytes(plan.bytes)} into {plan.months} month folder{plan.months === 1 ? "" : "s"}.
+            </p>
+            <p className="text-muted">
+              Big videos take a few minutes each. It runs in the background, so you can leave the page. Nothing is
+              overwritten: a file whose name is already taken there stays here and is listed as skipped.
+            </p>
+            {plan.skipped.length > 0 && (
+              <details>
+                <summary className="cursor-pointer">{plan.skipped.length} will stay here</summary>
+                <ul className="text-muted mt-1 flex flex-col gap-0.5">
+                  {plan.skipped.slice(0, 50).map((s) => (
+                    <li key={s.name} className="truncate">{s.name}: {s.reason}</li>
+                  ))}
+                  {plan.skipped.length > 50 && <li>…and {plan.skipped.length - 50} more</li>}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </ConfirmDialog>
 
       {uploads.length > 0 && (
         <ul className="panel flex flex-col gap-2 px-4 py-3 text-sm">
@@ -229,11 +331,29 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
         </div>
       )}
 
-      {entries.length === 0 ? (
-        <p className="panel text-muted px-5 py-4">This folder is empty.</p>
+      <p className="text-muted text-sm" aria-live="polite">
+        {isFiltered(filters) ? `${visible.length} of ${entries.length} match` : `${entries.length} item${entries.length === 1 ? "" : "s"}`}
+        {visibleBytes > 0 && ` · ${formatBytes(visibleBytes)}`}
+      </p>
+
+      {visible.length === 0 ? (
+        <p className="panel text-muted px-5 py-4">{entries.length === 0 ? "This folder is empty." : "Nothing matches these filters."}</p>
       ) : (
         <ul className="panel flex flex-col divide-y divide-foreground/10 px-4">
-          {entries.slice(0, shown).map((entry) => (
+          {canManage && (
+            <li className="flex items-center gap-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={allChosen}
+                onChange={() => setSelected(allChosen ? new Set() : new Set(visible.map((e) => e.name)))}
+                aria-label={isFiltered(filters) ? "Select all matching" : "Select all"}
+              />
+              <span className="text-muted">
+                {allChosen ? "Clear selection" : isFiltered(filters) ? `Select all ${visible.length} matching` : `Select all ${visible.length}`}
+              </span>
+            </li>
+          )}
+          {visible.slice(0, shown).map((entry) => (
             <li key={entry.name} className="flex items-center gap-3 py-2">
               {canManage && (
                 <input type="checkbox" checked={selected.has(entry.name)} onChange={() => toggle(entry.name)} aria-label={`Select ${entry.name}`} />
@@ -261,9 +381,9 @@ export function FileBrowser({ folder, entries, canManage }: Props) {
           ))}
         </ul>
       )}
-      {entries.length > shown && (
+      {visible.length > shown && (
         <button type="button" className="btn-quiet self-center" onClick={() => setShown((n) => n + PAGE)}>
-          Show more ({entries.length - shown} left)
+          Show more ({visible.length - shown} left)
         </button>
       )}
     </section>

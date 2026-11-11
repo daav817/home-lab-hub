@@ -205,7 +205,7 @@ export function webdavUrl(path: FilePath | string) {
   return `${base}/${text.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-async function rc<T>(command: string, body: object): Promise<T> {
+export async function rc<T>(command: string, body: object): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${rcUrl()}/${command}`, {

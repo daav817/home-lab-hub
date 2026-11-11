@@ -6,6 +6,7 @@ import {
   assertShare, canViewFiles, driveRatio, FilesError, folderHref, formatBytes, groupDrives, listFolder, listShares,
   parsePath, type FilePath,
 } from "@/lib/files";
+import { inSource, organizeConfig } from "@/lib/media";
 import { FileBrowser } from "./file-browser";
 
 type Params = { path?: string[] };
@@ -71,7 +72,11 @@ async function Folder({ path }: { path: FilePath }) {
     if (error instanceof FilesError && error.status === 404) notFound();
     return <Problem message={error instanceof FilesError ? error.message : "Couldn't read that folder."} />;
   }
-  return <FileBrowser folder={path} entries={entries} canManage={user.level === "admin"} />;
+  const admin = user.level === "admin";
+  const config = organizeConfig();
+  const organize = admin && inSource(path, config);
+  const atSource = organize && path.parts.length === config.source.parts.length;
+  return <FileBrowser folder={path} entries={entries} canManage={admin} organize={organize} atSource={atSource} />;
 }
 
 function Breadcrumbs({ path }: { path: FilePath | null }) {
