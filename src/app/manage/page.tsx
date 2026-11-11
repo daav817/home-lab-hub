@@ -68,6 +68,9 @@ export default function ManagePage() {
           <Link href="/manage/backups" className="underline">
             Backups
           </Link>
+          <Link href="/manage/drives" className="underline">
+            Drives
+          </Link>
           <Link href="/manage/new" className="underline">
             Add app
           </Link>

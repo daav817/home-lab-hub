@@ -38,6 +38,11 @@ const migrations = [
      ('Recordings', 'Camera clips: play, group, delete', 'https://hub.energiapower.llc/recordings',
       'http://clip-keeper.cameras.svc.cluster.local:8080/healthz', 'Home', 'family', 110)
    on conflict (name) do nothing`,
+  // Router shares (Phase 6). The hub serves them itself, so it has no separate status check.
+  `insert into apps (name, description, url, status_url, category, audience, sort_order) values
+     ('Files', 'Router drives: photos, videos, music and shared files', 'https://hub.energiapower.llc/files',
+      null, 'Home', 'family', 120)
+   on conflict (name) do nothing`,
 ];
 
 export async function migrate() {

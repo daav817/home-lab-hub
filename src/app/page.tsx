@@ -5,6 +5,7 @@ import { visibleApps } from "@/lib/apps";
 import { backupWarning } from "@/lib/backups";
 import { healthWarning } from "@/lib/cluster-health";
 import { listManagedApps } from "@/lib/db";
+import { driveWarnings, groupDrives, listShares } from "@/lib/files";
 import { AppSearch } from "./app-search";
 import { AppTile } from "./app-tile";
 import { HelpButton } from "./help-button";
@@ -28,6 +29,20 @@ async function HealthWarning() {
   return (
     <Link href="/manage/health" role="alert" className="panel px-5 py-3 text-(--down)">
       {warning}
+    </Link>
+  );
+}
+
+// Router drives at 85% or more (admins only). Quiet if the router can't be read: the Drives
+// page and Prometheus report that.
+async function DriveWarning() {
+  const warnings = await listShares()
+    .then((shares) => driveWarnings(groupDrives(shares)))
+    .catch(() => []);
+  if (warnings.length === 0) return null;
+  return (
+    <Link href="/manage/drives" role="alert" className="panel px-5 py-3 text-(--down)">
+      {warnings.join(" ")}
     </Link>
   );
 }
@@ -65,6 +80,11 @@ async function Portal() {
       {user.level === "admin" && (
         <Suspense fallback={null}>
           <HealthWarning />
+        </Suspense>
+      )}
+      {user.level === "admin" && (
+        <Suspense fallback={null}>
+          <DriveWarning />
         </Suspense>
       )}
       {apps.length === 0 && (

@@ -12,6 +12,7 @@ resources:
   - hub-db.sealedsecret.yaml
   - hub-clips.sealedsecret.yaml
   - postgres.yaml
+  - monitoring.yaml
 images:
   - name: ghcr.io/daav817/home-lab-hub
     newTag: "0.1.0.26"

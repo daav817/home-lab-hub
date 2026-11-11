@@ -16,6 +16,14 @@ spec:
     spec:
       serviceAccountName: hub
       automountServiceAccountToken: true
+      # Off the control plane: it's short of memory, and uploads are staged on the node's disk.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -36,6 +44,16 @@ spec:
             # Recordings page: the clip keeper's API (cameras namespace) and its token.
             - name: CLIPS_API_URL
               value: http://clip-keeper.cameras.svc.cluster.local:8080
+            # Files and Drives pages: the "files" container below (rclone), pod-local only.
+            - name: FILES_WEBDAV_URL
+              value: http://127.0.0.1:8091
+            - name: FILES_RC_URL
+              value: http://127.0.0.1:5572
+            # Shares never shown, whatever the router account can open.
+            - name: FILES_HIDDEN
+              value: k8s-storage-folder,camera-clips
+            - name: FILES_STAGING
+              value: /staging
           envFrom:
             - secretRef:
                 name: hub-auth
@@ -43,6 +61,10 @@ spec:
                 name: hub-db
             - secretRef:
                 name: hub-clips
+                optional: true
+            # METRICS_TOKEN for /api/metrics (from scripts/seal-router-files.ps1)
+            - secretRef:
+                name: hub-metrics
                 optional: true
           ports:
             - name: http
@@ -75,6 +97,61 @@ spec:
               mountPath: /tmp
             - name: next-cache
               mountPath: /app/.next/cache
+            - name: staging
+              mountPath: /staging
+        # The router's shares, through the hub's own router account (secret hub-router, from
+        # scripts/seal-router-files.ps1). Serves them as WebDAV plus rclone's remote-control API,
+        # both on the pod's loopback only, so only the web container can use them. Which shares
+        # are visible is set in SRM: whatever this account may open.
+        - name: files
+          image: rclone/rclone:1.69.1
+          command:
+            - sh
+            - -c
+            - |
+              if [ -z "$SMB_PASSWORD" ]; then
+                echo "No hub-router secret yet: run scripts/seal-router-files.ps1. The Files page stays empty until then."
+                exec sleep 2147483647
+              fi
+              export RCLONE_CONFIG_ROUTER_PASS="$(rclone obscure "$SMB_PASSWORD")"
+              unset SMB_PASSWORD
+              exec rclone serve webdav router: --addr 127.0.0.1:8091                 --rc --rc-addr 127.0.0.1:5572 --rc-no-auth                 --dir-cache-time 10s --log-level NOTICE
+          env:
+            - name: HOME
+              value: /tmp
+            - name: RCLONE_CONFIG
+              value: /tmp/rclone.conf
+            - name: RCLONE_CONFIG_ROUTER_TYPE
+              value: smb
+            # The router speaks SMB 2.0.2 only (no encryption), on the home LAN.
+            - name: RCLONE_CONFIG_ROUTER_HOST
+              value: 192.168.1.1
+            - name: RCLONE_CONFIG_ROUTER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: hub-router
+                  key: SMB_USER
+                  optional: true
+            - name: SMB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hub-router
+                  key: SMB_PASSWORD
+                  optional: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir:
@@ -83,5 +160,9 @@ spec:
         - name: next-cache
           emptyDir:
             sizeLimit: 256Mi
+        # Uploads in progress (src/lib/uploads.ts): up to 10 GB per file, on the node's disk.
+        - name: staging
+          emptyDir:
+            sizeLimit: 11Gi
       imagePullSecrets:
         - name: ghcr-pull-secret
