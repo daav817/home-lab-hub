@@ -1,6 +1,9 @@
+# Pod Security: the strictest level (see scripts/apply-pod-security.mjs).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: hub
   labels:
     pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

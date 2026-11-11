@@ -1,0 +1,219 @@
+# Off-site copy (Phase 7): every night at 5:30, after the 3:30 Longhorn backups, this job copies
+# to Cloudflare R2, encrypted before anything leaves the house:
+#   1. the router's k8s-storage-folder (Longhorn's backup store: every backed-up volume),
+#   2. the k3s cluster-state snapshots (etcd: every object and Secret in the cluster, including
+#      the Sealed Secrets key) from openclaw, taken by k3s every 12 hours.
+#
+# Encryption: rclone "crypt" (file contents and names). Cloudflare only ever sees random
+# bytes. The password and salt are in the sealed offsite-backup secret, AND must be kept
+# outside the house (password manager): without them the copy can't be read, and after a total
+# loss the cluster that holds the sealed secret is gone too.
+#
+# Protection against a bad router copy (ransomware, accidental delete): files that change or
+# disappear on the router aren't deleted off-site, they're moved to longhorn-replaced/<date>/
+# and kept 30 days. Cluster snapshots are kept 30 days.
+#
+# Restore (outline; see docs/architecture.html runbook): configure the same three rclone
+# remotes on any machine (r2 = S3 provider Cloudflare, offsite = crypt over r2:<bucket>/home-lab
+# with the saved password and salt), then
+#   rclone copy offsite:longhorn <folder>   -> point a Longhorn backup target at it, restore volumes
+#   rclone copy offsite:etcd <folder>       -> k3s server --cluster-reset --cluster-reset-restore-path=<snapshot>
+#
+# Credentials and keys: scripts/seal-offsite-backup.ps1 (which also turns this job on).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: offsite-backup
+  namespace: longhorn-system
+data:
+  offsite.sh: |
+    #!/bin/sh
+    set -eu
+    # Passwords are handed to rclone in its obscured form and the plain copies dropped.
+    RCLONE_CONFIG_ROUTER_PASS="$(rclone obscure "$CIFS_PASSWORD")"
+    RCLONE_CONFIG_OFFSITE_PASSWORD="$(rclone obscure "$CRYPT_PASSWORD")"
+    RCLONE_CONFIG_OFFSITE_PASSWORD2="$(rclone obscure "$CRYPT_SALT")"
+    RCLONE_CONFIG_OFFSITE_REMOTE="r2:${R2_BUCKET}/home-lab"
+    export RCLONE_CONFIG_ROUTER_PASS RCLONE_CONFIG_OFFSITE_PASSWORD RCLONE_CONFIG_OFFSITE_PASSWORD2 RCLONE_CONFIG_OFFSITE_REMOTE
+    unset CIFS_PASSWORD CRYPT_PASSWORD CRYPT_SALT
+
+    today=$(date -u +%Y-%m-%d)
+    flags="--stats 5m --stats-one-line --stats-log-level NOTICE"
+
+    echo "1/4 Longhorn backups: router k8s-storage-folder -> R2"
+    # SRM's recycle bin (#recycle) isn't copied.
+    rclone sync router:k8s-storage-folder offsite:longhorn --exclude "#recycle/**" \
+      --backup-dir "offsite:longhorn-replaced/$today" --transfers 4 $flags
+
+    echo "2/4 cluster state: k3s etcd snapshots -> R2"
+    rclone copy /etcd-snapshots offsite:etcd --max-age 72h $flags
+    rclone delete offsite:etcd --min-age 30d
+
+    echo "3/4 replaced files older than 30 days"
+    cutoff=$(date -u -d "@$(( $(date +%s) - 30 * 86400 ))" +%Y-%m-%d)
+    for dir in $(rclone lsf --dirs-only offsite:longhorn-replaced 2>/dev/null); do
+      name=${dir%/}
+      if [ "$name" \< "$cutoff" ]; then echo "removing longhorn-replaced/$name"; rclone purge "offsite:longhorn-replaced/$name"; fi
+    done
+
+    echo "4/4 check: every router file is off-site at the same size"
+    rclone check router:k8s-storage-folder offsite:longhorn --exclude "#recycle/**" --one-way --size-only $flags
+    echo "done"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: offsite-backup
+  namespace: longhorn-system
+spec:
+  schedule: "30 5 * * *"
+  timeZone: America/New_York
+  # Off until scripts/seal-offsite-backup.ps1 has sealed the R2 key and encryption password.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 21600
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          # The etcd snapshots are on the control-plane node's disk.
+          nodeSelector:
+            kubernetes.io/hostname: openclaw
+          # Root only to read the snapshot files (root-owned, 0600); no capabilities, no
+          # privilege escalation, read-only root, and the host folder is mounted read-only.
+          securityContext:  # nosemgrep: run-as-non-root -- reads root-only k3s etcd snapshots (read-only hostPath); no capabilities; reviewed.
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: offsite
+              image: rclone/rclone:1.69.1
+              command: ["sh", "/script/offsite.sh"]
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: RCLONE_CONFIG
+                  value: /tmp/rclone.conf
+                - name: RCLONE_CONFIG_ROUTER_TYPE
+                  value: smb
+                - name: RCLONE_CONFIG_ROUTER_HOST
+                  value: 192.168.1.1
+                - name: RCLONE_CONFIG_ROUTER_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: cifs-secret
+                      key: CIFS_USERNAME
+                - name: CIFS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: cifs-secret
+                      key: CIFS_PASSWORD
+                - name: RCLONE_CONFIG_R2_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_R2_PROVIDER
+                  value: Cloudflare
+                - name: RCLONE_CONFIG_R2_NO_CHECK_BUCKET
+                  value: "true"
+                - name: RCLONE_CONFIG_R2_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: R2_ENDPOINT
+                - name: RCLONE_CONFIG_R2_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: R2_ACCESS_KEY_ID
+                - name: RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: R2_SECRET_ACCESS_KEY
+                - name: R2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: R2_BUCKET
+                - name: RCLONE_CONFIG_OFFSITE_TYPE
+                  value: crypt
+                - name: RCLONE_CONFIG_OFFSITE_FILENAME_ENCRYPTION
+                  value: standard
+                - name: RCLONE_CONFIG_OFFSITE_DIRECTORY_NAME_ENCRYPTION
+                  value: "true"
+                - name: CRYPT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: CRYPT_PASSWORD
+                - name: CRYPT_SALT
+                  valueFrom:
+                    secretKeyRef:
+                      name: offsite-backup
+                      key: CRYPT_SALT
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 512Mi
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                - name: etcd-snapshots
+                  mountPath: /etcd-snapshots
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: offsite-backup
+            - name: etcd-snapshots
+              hostPath:
+                path: /var/lib/rancher/k3s/server/db/snapshots
+                type: Directory
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: offsite-backup
+  namespace: longhorn-system
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: offsite-backup
+      rules:
+        # No successful off-site run in 30 hours (failed, stuck, or never started), once it's on.
+        - alert: OffsiteBackupOverdue
+          expr: >-
+            (time() - kube_cronjob_status_last_successful_time{namespace="longhorn-system",cronjob="offsite-backup"} > 108000)
+            and on() (kube_cronjob_spec_suspend{namespace="longhorn-system",cronjob="offsite-backup"} == 0)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: The encrypted off-site copy to Cloudflare R2 hasn't succeeded for over 30 hours.
+        - alert: OffsiteBackupNeverRan
+          expr: >-
+            absent(kube_cronjob_status_last_successful_time{namespace="longhorn-system",cronjob="offsite-backup"})
+            and on() (kube_cronjob_spec_suspend{namespace="longhorn-system",cronjob="offsite-backup"} == 0)
+          for: 30h
+          labels:
+            severity: warning
+          annotations:
+            summary: The off-site backup is switched on but has never finished successfully.

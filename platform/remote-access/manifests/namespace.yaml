@@ -1,6 +1,10 @@
+# Pod Security: privileged because the Wake-on-LAN relay uses the host network; anything else
+# that isn't baseline is reported (see scripts/apply-pod-security.mjs).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: remote-access
   labels:
-    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline
