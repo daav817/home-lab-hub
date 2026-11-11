@@ -289,8 +289,18 @@ export async function assertShare(share: string) {
   if (!shares.some((s) => s.name === share)) throw new FilesError("Not found.", 404);
 }
 
+// Made through WebDAV (MKCOL, one level at a time), not rclone's operations/mkdir: the WebDAV
+// side caches folder listings, so a folder made behind its back can't be moved or uploaded
+// into until that cache expires (MOVE into it fails with 403).
 export async function makeFolder(path: FilePath) {
-  await rc("operations/mkdir", { fs: remote(path.share), remote: path.parts.join("/") });
+  for (let i = 1; i <= path.parts.length; i++) {
+    const level = { share: path.share, parts: path.parts.slice(0, i) };
+    const response = await fetch(webdavUrl(level), { method: "MKCOL", cache: "no-store" }).catch(() => null);
+    if (!response) throw new FilesError("The router file service isn't answering.");
+    if (response.ok || response.status === 405) continue; // 405: already there
+    if (response.status === 403) throw new FilesError("The hub's router account can't open that.", 403);
+    throw new FilesError(`Couldn't make the folder (HTTP ${response.status}).`);
+  }
 }
 
 export async function deleteEntry(path: FilePath, isDir: boolean) {
