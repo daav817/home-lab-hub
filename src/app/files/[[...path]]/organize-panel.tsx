@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { formatBytes, type Entry } from "@/lib/files";
 import { planMoves } from "@/lib/media";
+import type { TidyPlan } from "@/lib/organizer";
 import {
-  getOrganizeStatus, organizeAll, saveNightly, stopOrganizing, type OrganizeState, type OrganizeStatus,
+  getOrganizeStatus, getTidyPlan, organizeAll, saveNightly, stopOrganizing, tidyAll, type OrganizeState, type OrganizeStatus,
 } from "../organize-actions";
 import { ConfirmDialog } from "./confirm-dialog";
 
@@ -50,11 +51,15 @@ export function useOrganizeStatus(enabled: boolean): [OrganizeStatus | null, () 
   return [status, refresh];
 }
 
-type Props = { status: OrganizeStatus | null; refresh: () => void; atSource: boolean; entries: Entry[] };
+// source: the upload folder itself; inside: a subfolder of it; tidy: the photo or video share.
+type Props = { status: OrganizeStatus | null; refresh: () => void; mode: "source" | "inside" | "tidy"; entries: Entry[] };
 
-export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
+export function OrganizePanel({ status, refresh, mode, entries }: Props) {
+  const atSource = mode === "source";
   const [message, setMessage] = useState<OrganizeState>({});
   const [askAll, setAskAll] = useState(false);
+  const [askTidy, setAskTidy] = useState(false);
+  const [tidyPlan, setTidyPlan] = useState<TidyPlan | { error: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<{ enabled: boolean; hour: number } | null>(null);
   const plan = useMemo(() => (askAll ? planMoves(entries.filter((e) => !e.isDir)) : null), [askAll, entries]);
@@ -69,6 +74,7 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
       const result = await action();
       setMessage(result);
       setAskAll(false);
+      setAskTidy(false);
       after?.();
       refresh();
     });
@@ -76,18 +82,40 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
   return (
     <div className="panel flex flex-col gap-3 px-5 py-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-medium">Move to Photos and Videos</h2>
+        <h2 className="text-base font-medium">{mode === "tidy" ? "Sort into month folders" : "Move to Photos and Videos"}</h2>
         {atSource && (
           <button type="button" className="btn-quiet" disabled={pending || running} onClick={() => setAskAll(true)}>
             Move all now
           </button>
         )}
+        {mode === "tidy" && (
+          <button
+            type="button"
+            className="btn-quiet"
+            disabled={pending || running}
+            onClick={() => {
+              setTidyPlan(null);
+              setAskTidy(true);
+              getTidyPlan().then(setTidyPlan).catch(() => setTidyPlan({ error: "Couldn't read the photo and video folders." }));
+            }}
+          >
+            Sort photo and video now
+          </button>
+        )}
       </div>
-      <p className="text-muted">
-        JPG and PNG files go to <strong>photo</strong>, MP4 and AVI to <strong>video</strong>, in{" "}
-        <code>year/year-month</code> folders by the date in the file name. Tick files below and choose{" "}
-        <em>Move to Photos/Videos</em>, or move everything at the top of this folder.
-      </p>
+      {mode === "tidy" ? (
+        <p className="text-muted">
+          Photos and videos lying straight in a year folder (like <code>2023/20230101_201514.jpg</code>) go into that
+          year&apos;s month folder (<code>2023/2023-01/</code>), made if missing, in both <strong>photo</strong> and{" "}
+          <strong>video</strong>. Named folders are left alone. These are quick renames on the router.
+        </p>
+      ) : (
+        <p className="text-muted">
+          JPG, PNG and HEIC files go to <strong>photo</strong>, MP4, AVI and MOV to <strong>video</strong>, in{" "}
+          <code>year/year-month</code> folders (made if missing) by the date in the file name. Tick files below and
+          choose <em>Move to Photos/Videos</em>, or move everything at the top of this folder.
+        </p>
+      )}
 
       {running && run && (
         <div className="flex flex-col gap-2" aria-live="polite">
@@ -133,7 +161,7 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
         </details>
       )}
 
-      {atSource && (
+      {mode !== "inside" && (
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2">
             <input
@@ -141,7 +169,7 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
               checked={nightly.enabled}
               onChange={(e) => setDraft({ ...nightly, enabled: e.target.checked })}
             />
-            Move everything here every night at
+            Every night at
           </label>
           <select
             aria-label="Hour"
@@ -158,7 +186,10 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
               Save
             </button>
           )}
-          <span className="text-muted">Stops starting new files after 6 hours; the rest go the next night.</span>
+          <span className="text-muted">
+            sort loose photo/video files into months, then move everything at the top of uploaded media. Stops
+            starting new files after 6 hours; the rest go the next night.
+          </span>
         </div>
       )}
 
@@ -177,15 +208,55 @@ export function OrganizePanel({ status, refresh, atSource, entries }: Props) {
           <>
             <p>
               <strong>{plan.photos}</strong> photos and <strong>{plan.videos}</strong> videos from the top of this folder,{" "}
-              {formatBytes(plan.bytes)} into {plan.months} month folders. Subfolders (Screenshots, Download, …) are left alone.
+              {formatBytes(plan.bytes)} into {plan.months} month folders (made if missing). Subfolders (Screenshots,
+              Download, …) are left alone.
             </p>
             <p className="text-muted">
               This can take hours for a big backlog. It runs in the background and can be stopped; nothing is overwritten.
             </p>
             {plan.skipped.filter((s) => s.reason !== "folder").length > 0 && (
               <p className="text-muted">
-                {plan.skipped.filter((s) => s.reason !== "folder").length} other files (HEIC, documents, …) stay here.
+                {plan.skipped.filter((s) => s.reason !== "folder").length} other files (documents, …) stay here.
               </p>
+            )}
+          </>
+        )}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={askTidy}
+        title="Sort photo and video into month folders?"
+        confirmLabel={tidyPlan && "move" in tidyPlan ? `Sort ${tidyPlan.move} files` : "Sort"}
+        busy={pending || !tidyPlan || !("move" in tidyPlan) || tidyPlan.move === 0}
+        onCancel={() => setAskTidy(false)}
+        onConfirm={() => act(tidyAll)}
+      >
+        {!tidyPlan && <p className="text-muted">Reading the year folders…</p>}
+        {tidyPlan && "error" in tidyPlan && <p role="alert" className="text-(--down)">{tidyPlan.error}</p>}
+        {tidyPlan && "move" in tidyPlan && (
+          <>
+            <ul>
+              {tidyPlan.shares.map((s) => (
+                <li key={s.share}>
+                  <strong>{s.share}</strong>: {s.files} files ({formatBytes(s.bytes)}) into their month folders
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted">
+              Each stays in the year it&apos;s in. Nothing is overwritten, and named folders aren&apos;t touched.
+            </p>
+            {tidyPlan.stay > 0 && (
+              <details>
+                <summary className="cursor-pointer">
+                  {tidyPlan.stay} stay in their year folder (their date is in another year, or unknown)
+                </summary>
+                <ul className="text-muted mt-1 flex flex-col gap-0.5">
+                  {tidyPlan.samples.map((s) => (
+                    <li key={s.name} className="truncate">{s.name}: {s.reason}</li>
+                  ))}
+                  {tidyPlan.stay > tidyPlan.samples.length && <li>…and {tidyPlan.stay - tidyPlan.samples.length} more</li>}
+                </ul>
+              </details>
             )}
           </>
         )}

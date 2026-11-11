@@ -7,8 +7,8 @@ import { extension, type FilePath } from "./files";
 export type FileType = "photo" | "video" | "audio" | "document" | "other";
 
 const TYPES: Record<Exclude<FileType, "other">, string[]> = {
-  photo: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif", "tif", "tiff", "dng", "raw"],
-  video: ["mp4", "m4v", "mov", "avi", "mkv", "mts", "m2ts", "mpg", "mpeg", "wmv", "3gp", "webm"],
+  photo: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif", "tif", "tiff", "dng", "raw", "rw2", "cr2", "nef", "arw"],
+  video: ["mp4", "m4v", "mov", "avi", "mkv", "mts", "m2ts", "mpg", "mpeg", "wmv", "3gp", "3g2", "webm"],
   audio: ["mp3", "m4a", "aac", "wav", "flac", "ogg", "wma"],
   document: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "csv", "htm", "html", "xml", "md"],
 };
@@ -23,8 +23,13 @@ export function fileType(name: string): FileType {
 
 export type MediaKind = "photo" | "video";
 
-// Only these move (as asked): JPG/PNG photos to Photos, MP4/AVI videos to Videos.
-const ORGANIZE: Record<string, MediaKind> = { jpg: "photo", jpeg: "photo", png: "photo", mp4: "video", avi: "video" };
+// Only these move from the upload folder (as asked): JPG/PNG/HEIC photos to Photos,
+// MP4/AVI/MOV videos to Videos.
+const ORGANIZE: Record<string, MediaKind> = {
+  jpg: "photo", jpeg: "photo", png: "photo", heic: "photo", heif: "photo",
+  mp4: "video", avi: "video", mov: "video",
+};
+export const ORGANIZE_TYPES = "JPG, PNG, HEIC, MP4, AVI or MOV";
 
 export function mediaKind(name: string): MediaKind | null {
   return ORGANIZE[extension(name)] ?? null;
@@ -105,7 +110,7 @@ export function planMoves(entries: PlanEntry[], now = new Date()): Plan {
   for (const entry of entries) {
     const kind = entry.isDir ? null : mediaKind(entry.name);
     if (!kind) {
-      plan.skipped.push({ name: entry.name, reason: entry.isDir ? "folder" : "not a JPG, PNG, MP4 or AVI" });
+      plan.skipped.push({ name: entry.name, reason: entry.isDir ? "folder" : `not a ${ORGANIZE_TYPES}` });
       continue;
     }
     const date = takenMonth(entry.name, entry.modified, now);
@@ -119,4 +124,28 @@ export function planMoves(entries: PlanEntry[], now = new Date()): Plan {
   }
   plan.months = months.size;
   return plan;
+}
+
+// --- Tidying photo and video: loose files in a year folder go into its month folders --------
+
+const YEAR = /^\d{4}$/;
+
+// A photo or video lying straight in a year folder of the photo or video share (photo/2023/x.jpg).
+// Named folders (photo/Gallery Wall, video/movies, photo/2019/Preschool_Pics) are never touched.
+export function isLoose(path: FilePath, config: OrganizeConfig) {
+  if (path.share !== config.photos && path.share !== config.videos) return false;
+  if (path.parts.length !== 2 || !YEAR.test(path.parts[0])) return false;
+  const type = fileType(path.parts[1]);
+  return type === "photo" || type === "video";
+}
+
+// Where a loose file goes: the month folder inside the year folder it's already in. A file
+// whose date is in another year (a camera with a wrong clock, a later copy) stays put.
+export function tidyTarget(path: FilePath, modified: string | null, config: OrganizeConfig, now = new Date()): { to: FilePath } | { skip: string } | null {
+  if (!isLoose(path, config)) return null;
+  const [year, name] = path.parts;
+  const date = takenMonth(name, modified, now);
+  if (!date) return { skip: "no date" };
+  if (String(date.year) !== year) return { skip: `dated ${monthFolder(date)}, not ${year}; left in the year folder` };
+  return { to: { share: path.share, parts: [year, monthFolder(date), name] } };
 }

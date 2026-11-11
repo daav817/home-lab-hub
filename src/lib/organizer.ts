@@ -9,8 +9,8 @@
 // destination stays where it is and is listed as skipped.
 
 import { recordAudit, sql } from "./db";
-import { FilesError, joinPath, makeFolder, parentOf, rc, type FilePath } from "./files";
-import { destination, inSource, mediaKind, organizeConfig, takenMonth } from "./media";
+import { FilesError, joinPath, makeFolder, parentOf, rc, rename, type FilePath } from "./files";
+import { destination, inSource, isLoose, mediaKind, ORGANIZE_TYPES, organizeConfig, takenMonth, tidyTarget } from "./media";
 
 export type Trigger = "manual" | "nightly";
 export type RunStatus = "running" | "stopping" | "done" | "stopped" | "failed" | "interrupted";
@@ -129,20 +129,35 @@ async function waitForJob(jobid: number, timeoutMs: number) {
   }
 }
 
-// One file: the bytes moved, or why it wasn't moved.
-async function moveOne(from: FilePath, madeFolders: Set<string>): Promise<{ skip?: string; fail?: string; bytes?: number }> {
+// Where a file goes, or why it stays: uploads go across to the photo/video share; loose files
+// in a photo/video year folder go into that year's month folder.
+function target(from: FilePath, modified: string | null): { to: FilePath; checks: FilePath[] } | { skip: string } {
   const config = organizeConfig();
   const name = from.parts.at(-1)!;
-  const kind = mediaKind(name);
-  if (!kind) return { skip: "not a JPG, PNG, MP4 or AVI" };
+  if (inSource(parentOf(from), config)) {
+    const kind = mediaKind(name);
+    if (!kind) return { skip: `not a ${ORGANIZE_TYPES}` };
+    const date = takenMonth(name, modified);
+    if (!date) return { skip: "no date" };
+    const to = destination(name, kind, date, config);
+    // Older years keep files straight in the year folder (photo/2023/x.jpg), so a copy there
+    // counts as already organized too.
+    return { to, checks: [to, { share: to.share, parts: [String(date.year), name] }] };
+  }
+  const tidy = tidyTarget(from, modified, config);
+  if (!tidy) return { skip: "not an upload or a loose photo/video in a year folder" };
+  if ("skip" in tidy) return tidy;
+  return { to: tidy.to, checks: [tidy.to] };
+}
+
+// One file: the bytes moved, or why it wasn't moved.
+async function moveOne(from: FilePath, madeFolders: Set<string>): Promise<{ skip?: string; fail?: string; bytes?: number }> {
   const source = await stat(from);
   if (!source || source.IsDir) return { skip: "no longer there" };
-  const date = takenMonth(name, source.ModTime ?? null);
-  if (!date) return { skip: "no date" };
-  const to = destination(name, kind, date, config);
-  // Older years keep files straight in the year folder (photo/2023/x.jpg), so a copy there
-  // counts as already organized too.
-  for (const place of [to, { share: to.share, parts: [String(date.year), name] }]) {
+  const plan = target(from, source.ModTime ?? null);
+  if ("skip" in plan) return plan;
+  const { to } = plan;
+  for (const place of plan.checks) {
     const there = await stat(place);
     if (!there) continue;
     const where = joinPath(parentOf(place));
@@ -154,18 +169,22 @@ async function moveOne(from: FilePath, madeFolders: Set<string>): Promise<{ skip
   }
   const folder = joinPath(parentOf(to));
   if (!madeFolders.has(folder)) {
-    await makeFolder(parentOf(to));
+    await makeFolder(parentOf(to)); // makes the year and month folders as needed
     madeFolders.add(folder);
   }
   const size = Math.max(0, source.Size ?? 0);
-  const { jobid } = await rc<{ jobid: number }>("operations/movefile", {
-    srcFs: `router:${from.share}`, srcRemote: from.parts.join("/"),
-    dstFs: `router:${to.share}`, dstRemote: to.parts.join("/"),
-    _async: true,
-  });
-  await waitForJob(jobid, 10 * 60_000 + (size / (2 * 1024 * 1024)) * 1000); // at least 2 MB/s
+  if (from.share === to.share) {
+    await rename(from, to); // same share: an instant rename on the router
+  } else {
+    const { jobid } = await rc<{ jobid: number }>("operations/movefile", {
+      srcFs: `router:${from.share}`, srcRemote: from.parts.join("/"),
+      dstFs: `router:${to.share}`, dstRemote: to.parts.join("/"),
+      _async: true,
+    });
+    await waitForJob(jobid, 10 * 60_000 + (size / (2 * 1024 * 1024)) * 1000); // at least 2 MB/s
+  }
   const arrived = await stat(to);
-  if (!arrived || arrived.Size !== source.Size) return { fail: "the copy at the destination doesn't match; the original was kept" };
+  if (!arrived || arrived.Size !== source.Size) return { fail: "the file at the destination doesn't match; the original was kept" };
   return { bytes: size };
 }
 
@@ -219,26 +238,73 @@ async function work(run: Run, files: FilePath[], deadline: number | null, onFini
   }
 }
 
-// Files at the top of the upload folder that the organizer would move (the nightly list).
-export async function sourceFiles(): Promise<FilePath[]> {
-  const { source } = organizeConfig();
-  const data = await rc<{ list: { Name: string; IsDir: boolean }[] }>("operations/list", {
-    fs: `router:${source.share}`, remote: source.parts.join("/"), opt: { filesOnly: true, noMimeType: true, noModTime: true },
-  });
-  return (data.list ?? [])
-    .filter((i) => !i.IsDir && mediaKind(i.Name))
-    .map((i) => ({ share: source.share, parts: [...source.parts, i.Name] }))
-    .sort((a, b) => a.parts.at(-1)!.localeCompare(b.parts.at(-1)!, undefined, { numeric: true }));
+type Listed = { Name: string; IsDir: boolean; Size: number; ModTime?: string };
+
+async function listFiles(share: string, remote: string) {
+  const data = await rc<{ list: Listed[] }>("operations/list", { fs: `router:${share}`, remote, opt: { filesOnly: true, noMimeType: true } });
+  return (data.list ?? []).filter((i) => !i.IsDir);
 }
 
-// Starts a run in the background; returns at once. Only files inside the upload folder move.
+const byName = (a: FilePath, b: FilePath) => a.parts.join("/").localeCompare(b.parts.join("/"), undefined, { numeric: true });
+
+// Files at the top of the upload folder that the organizer would move.
+export async function sourceFiles(): Promise<FilePath[]> {
+  const { source } = organizeConfig();
+  return (await listFiles(source.share, source.parts.join("/")))
+    .filter((i) => mediaKind(i.Name))
+    .map((i) => ({ share: source.share, parts: [...source.parts, i.Name] }))
+    .sort(byName);
+}
+
+export type LooseFile = { path: FilePath; size: number; modified: string | null };
+
+// Photos and videos lying straight in a year folder of the photo and video shares.
+export async function looseFiles(): Promise<LooseFile[]> {
+  const config = organizeConfig();
+  const found: LooseFile[] = [];
+  for (const share of [config.photos, config.videos]) {
+    const years = await rc<{ list: Listed[] }>("operations/list", { fs: `router:${share}`, remote: "", opt: { dirsOnly: true, noMimeType: true } });
+    for (const year of (years.list ?? []).map((i) => i.Name).filter((n) => /^\d{4}$/.test(n))) {
+      for (const file of await listFiles(share, year)) {
+        const path = { share, parts: [year, file.Name] };
+        if (isLoose(path, config)) found.push({ path, size: Math.max(0, file.Size), modified: file.ModTime ?? null });
+      }
+    }
+  }
+  return found.sort((x, y) => byName(x.path, y.path));
+}
+
+export type TidyPlan = { shares: { share: string; files: number; bytes: number }[]; move: number; stay: number; samples: Skip[] };
+
+// What sorting the loose files would do, before anything moves.
+export async function planTidy(): Promise<TidyPlan> {
+  const config = organizeConfig();
+  const plan: TidyPlan = { shares: [config.photos, config.videos].map((share) => ({ share, files: 0, bytes: 0 })), move: 0, stay: 0, samples: [] };
+  for (const file of await looseFiles()) {
+    const result = tidyTarget(file.path, file.modified, config);
+    if (!result) continue;
+    if ("skip" in result) {
+      plan.stay++;
+      if (plan.samples.length < 50) plan.samples.push({ name: joinPath(file.path), reason: result.skip });
+      continue;
+    }
+    plan.move++;
+    const share = plan.shares.find((x) => x.share === file.path.share)!;
+    share.files++;
+    share.bytes += file.size;
+  }
+  return plan;
+}
+
+// Starts a run in the background; returns at once. Only uploads and loose photo/video files move.
 export async function startOrganize(
   files: FilePath[], actor: string, trigger: Trigger, onFinish: (run: Run) => Promise<void> = auditFinished,
 ): Promise<Run> {
   if (state.active) throw new FilesError("A move is already running.", 409);
   const config = organizeConfig();
-  const allowed = files.filter((f) => f.parts.length > config.source.parts.length && inSource(parentOf(f), config) && mediaKind(f.parts.at(-1)!));
-  if (allowed.length === 0) throw new FilesError("None of those are JPG, PNG, MP4 or AVI files in the upload folder.", 400);
+  const upload = (f: FilePath) => f.parts.length > config.source.parts.length && inSource(parentOf(f), config) && mediaKind(f.parts.at(-1)!);
+  const allowed = files.filter((f) => upload(f) || isLoose(f, config));
+  if (allowed.length === 0) throw new FilesError(`None of those are ${ORGANIZE_TYPES} files in the upload folder.`, 400);
   const [{ id, startedAt }] = await sql<{ id: number; startedAt: Date }[]>`
     insert into organize_runs (trigger, actor, status, total) values (${trigger}, ${actor}, 'running', ${allowed.length})
     returning id, started_at as "startedAt"
@@ -263,7 +329,8 @@ export async function nightlyTick(now = new Date()) {
   if (hour !== nightly.hour) return null;
   const [recent] = await sql`select 1 from organize_runs where trigger = 'nightly' and started_at > ${new Date(now.getTime() - 20 * 3600_000)}`;
   if (recent) return null;
-  const files = await sourceFiles();
+  // Loose files first (quick renames), then the uploads (copies across shares).
+  const files = [...(await looseFiles()).map((f) => f.path), ...(await sourceFiles())];
   if (files.length === 0) return null;
   return startOrganize(files, "hub", "nightly");
 }

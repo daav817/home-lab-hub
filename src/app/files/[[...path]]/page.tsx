@@ -76,7 +76,9 @@ async function Folder({ path }: { path: FilePath }) {
   const config = organizeConfig();
   const organize = admin && inSource(path, config);
   const atSource = organize && path.parts.length === config.source.parts.length;
-  return <FileBrowser folder={path} entries={entries} canManage={admin} organize={organize} atSource={atSource} />;
+  // The photo and video shares' own pages offer sorting loose files into month folders.
+  const tidy = admin && path.parts.length === 0 && (path.share === config.photos || path.share === config.videos);
+  return <FileBrowser folder={path} entries={entries} canManage={admin} organize={organize} atSource={atSource} tidy={tidy} />;
 }
 
 function Breadcrumbs({ path }: { path: FilePath | null }) {

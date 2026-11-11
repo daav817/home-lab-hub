@@ -18,7 +18,8 @@ const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "nume
 
 // organize: this folder is the phone's upload folder (or inside it) and the viewer is an admin.
 // atSource: it's the upload folder itself (where "Move all" and the nightly setting live).
-type Props = { folder: FilePath; entries: Entry[]; canManage: boolean; organize: boolean; atSource: boolean };
+// tidy: the photo or video share's own page (sorting loose files into month folders).
+type Props = { folder: FilePath; entries: Entry[]; canManage: boolean; organize: boolean; atSource: boolean; tidy: boolean };
 type Upload = { name: string; sent: number; total: number; error?: string; done?: boolean };
 type Asking = "delete" | "organize" | null;
 
@@ -85,7 +86,7 @@ function NameList({ entries }: { entries: Entry[] }) {
   );
 }
 
-export function FileBrowser({ folder, entries, canManage, organize, atSource }: Props) {
+export function FileBrowser({ folder, entries, canManage, organize, atSource, tidy }: Props) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -96,7 +97,7 @@ export function FileBrowser({ folder, entries, canManage, organize, atSource }: 
   const [message, setMessage] = useState<FileActionState>({});
   const [asking, setAsking] = useState<Asking>(null);
   const [pending, startTransition] = useTransition();
-  const [status, refreshStatus] = useOrganizeStatus(organize);
+  const [status, refreshStatus] = useOrganizeStatus(organize || tidy);
 
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters]);
   // Actions only ever apply to ticked items that the filters still show.
@@ -164,7 +165,9 @@ export function FileBrowser({ folder, entries, canManage, organize, atSource }: 
 
   return (
     <section className="flex flex-col gap-4">
-      {organize && <OrganizePanel status={status} refresh={refreshStatus} atSource={atSource} entries={entries} />}
+      {(organize || tidy) && (
+        <OrganizePanel status={status} refresh={refreshStatus} mode={tidy ? "tidy" : atSource ? "source" : "inside"} entries={entries} />
+      )}
 
       {canManage && (
         <div className="panel sticky top-2 z-10 flex flex-wrap items-center gap-3 px-4 py-3">
@@ -254,8 +257,8 @@ export function FileBrowser({ folder, entries, canManage, organize, atSource }: 
         {plan && (
           <>
             <p>
-              <strong>{plan.photos}</strong> photo{plan.photos === 1 ? "" : "s"} (JPG, PNG) go to <strong>photo</strong> and{" "}
-              <strong>{plan.videos}</strong> video{plan.videos === 1 ? "" : "s"} (MP4, AVI) to <strong>video</strong>, each in a{" "}
+              <strong>{plan.photos}</strong> photo{plan.photos === 1 ? "" : "s"} (JPG, PNG, HEIC) go to <strong>photo</strong> and{" "}
+              <strong>{plan.videos}</strong> video{plan.videos === 1 ? "" : "s"} (MP4, AVI, MOV) to <strong>video</strong>, each in a{" "}
               <code>year/year-month</code> folder (like <code>2025/2025-12</code>) by the date in its name. That&apos;s{" "}
               {formatBytes(plan.bytes)} into {plan.months} month folder{plan.months === 1 ? "" : "s"}.
             </p>

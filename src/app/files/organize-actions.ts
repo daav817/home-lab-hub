@@ -4,7 +4,8 @@ import { requireAdmin } from "@/lib/access";
 import { recordAudit } from "@/lib/db";
 import { FilesError, parsePath, type FilePath } from "@/lib/files";
 import {
-  organizerStatus, setNightly, sourceFiles, startOrganize, stopOrganize, type Nightly, type Run,
+  looseFiles, organizerStatus, planTidy, setNightly, sourceFiles, startOrganize, stopOrganize, type Nightly, type Run,
+  type TidyPlan,
 } from "@/lib/organizer";
 
 export type OrganizeState = { error?: string; done?: string };
@@ -70,5 +71,27 @@ export async function saveNightly(value: Nightly): Promise<OrganizeState> {
     await recordAudit(user.name, "files.organize-nightly", "organizer", saved);
     const hour = new Date(2000, 0, 1, saved.hour).toLocaleTimeString("en-US", { hour: "numeric" });
     return { done: saved.enabled ? `Nightly moves on, starting at ${hour}.` : "Nightly moves off." };
+  });
+}
+
+// What sorting loose photo/video files into month folders would do (shown before it starts).
+export async function getTidyPlan(): Promise<TidyPlan | { error: string }> {
+  try {
+    await requireAdmin();
+    return await planTidy();
+  } catch (error) {
+    return { error: error instanceof FilesError ? error.message : "Couldn't read the photo and video folders." };
+  }
+}
+
+// Sorts every loose photo/video in a year folder of photo and video into its month folder.
+export async function tidyAll(): Promise<OrganizeState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const files = (await looseFiles()).map((f) => f.path);
+    if (files.length === 0) return { done: "Nothing to sort: no loose photos or videos in the year folders." };
+    const run = await startOrganize(files, user.name, "manual");
+    await recordAudit(user.name, "files.organize-started", `run ${run.id}`, { trigger: "manual-tidy", files: run.total });
+    return { done: `Sorting ${run.total} files into month folders. You can leave this page; it keeps going.` };
   });
 }
