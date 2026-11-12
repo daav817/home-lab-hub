@@ -3,6 +3,8 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/access";
 import { formatBytes } from "@/lib/files";
 import { expiresAt, listTrash, trashDays } from "@/lib/trash";
+import { readBins } from "@/lib/recycle";
+import { BinList } from "./bin-list";
 import { TrashList } from "./trash-list";
 
 async function Trash() {
@@ -32,6 +34,23 @@ async function Trash() {
   );
 }
 
+// SRM's own recycle bins: sizes from the last background check (src/lib/recycle.ts).
+async function RecycleBins() {
+  await requireAdmin();
+  const summary = await readBins();
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-xl font-semibold">Router recycle bins</h2>
+      <p className="text-muted text-sm">
+        Files deleted from a share over the network (Windows, apps) went to that share&apos;s own recycle bin on the
+        router, which SRM doesn&apos;t show. The bins are switched off now, but what&apos;s in them still uses space until
+        it&apos;s emptied. Sizes are checked every 6 hours.
+      </p>
+      <BinList bins={summary.bins} checkedAt={summary.checkedAt} />
+    </section>
+  );
+}
+
 export default function TrashPage() {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8">
@@ -48,6 +67,9 @@ export default function TrashPage() {
       </header>
       <Suspense fallback={<p className="text-muted">Loading…</p>}>
         <Trash />
+      </Suspense>
+      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+        <RecycleBins />
       </Suspense>
     </main>
   );

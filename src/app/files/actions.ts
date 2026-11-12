@@ -6,6 +6,7 @@ import {
   assertShare, cleanName, exists, FilesError, joinPath, makeFolder, parentOf, parsePath, rename,
 } from "@/lib/files";
 import { deleteForever, describe, listTrash, moveToTrash, restore } from "@/lib/trash";
+import { deleteFromBin, emptyBin, restoreFromBin, scanBins } from "@/lib/recycle";
 
 export type FileActionState = { error?: string; done?: string };
 
@@ -97,5 +98,55 @@ export async function emptyTrash(): Promise<FileActionState> {
       count++;
     }
     return { done: `Emptied the Trash (${count} item${count === 1 ? "" : "s"}).` };
+  });
+}
+
+// --- SRM recycle bins (Manage > Trash, src/lib/recycle.ts) ---
+
+// share + path inside its bin, checked like any Files path.
+function binPath(share: string, path: string[]) {
+  const parsed = Array.isArray(path) ? parsePath([String(share), ...path.map(String)]) : null;
+  return parsed && !parsed.parts.includes("#recycle") ? parsed : null;
+}
+
+export async function checkBins(): Promise<FileActionState> {
+  return guard(async () => {
+    await requireAdmin();
+    const summary = await scanBins();
+    const files = summary.bins.reduce((n, b) => n + b.files, 0);
+    return { done: `Checked ${summary.bins.length} share${summary.bins.length === 1 ? "" : "s"}: ${files} file${files === 1 ? "" : "s"} in recycle bins.` };
+  });
+}
+
+export async function restoreBinItem(share: string, path: string[]): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const item = binPath(share, path);
+    if (!item || item.parts.length === 0) return { error: "That can't be restored." };
+    await restoreFromBin(item.share, item.parts);
+    await recordAudit(user.name, "files.recycle-restore", joinPath(item));
+    return { done: `Restored ${joinPath(item)}.` };
+  });
+}
+
+export async function deleteBinItem(share: string, path: string[], isDir: boolean): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const item = binPath(share, path);
+    if (!item || item.parts.length === 0) return { error: "That can't be deleted here." };
+    await deleteFromBin(item.share, item.parts, Boolean(isDir));
+    await recordAudit(user.name, "files.recycle-delete", joinPath(item), { isDir: Boolean(isDir) });
+    return { done: `Deleted ${item.parts.at(-1)} for good.` };
+  });
+}
+
+export async function emptyShareBin(share: string): Promise<FileActionState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const item = binPath(share, []);
+    if (!item) return { error: "Not found." };
+    await emptyBin(item.share);
+    await recordAudit(user.name, "files.recycle-empty", item.share);
+    return { done: `Emptied the ${item.share} recycle bin.` };
   });
 }

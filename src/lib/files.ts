@@ -205,7 +205,7 @@ export function webdavUrl(path: FilePath | string) {
   return `${base}/${text.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-export async function rc<T>(command: string, body: object): Promise<T> {
+export async function rc<T>(command: string, body: object, timeoutMs = 30_000): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${rcUrl()}/${command}`, {
@@ -213,7 +213,7 @@ export async function rc<T>(command: string, body: object): Promise<T> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new FilesError("The router file service isn't answering. Is the hub's router login set up?");

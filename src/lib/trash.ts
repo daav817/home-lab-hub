@@ -1,6 +1,8 @@
-// The hub's Trash for router files. SRM has no recycle bin for shared folders, so a delete in
-// the Files page moves the item to <share>/.hub-trash/<id>/<name> (an in-place move on the
-// router, instant even for big folders) and records it in the file_trash table. Admins can
+// The hub's Trash for router files. SRM's own per-share recycle bins were switched off on
+// 2026-11-12 (deletes over SMB filled them unseen; what's left in them is handled in
+// src/lib/recycle.ts), so a delete in the Files page moves the item to
+// <share>/.hub-trash/<id>/<name> (an in-place move on the router, instant even for big
+// folders) and records it in the file_trash table. Admins can
 // restore it or delete it for good from Manage > Trash; anything older than TRASH_DAYS
 // (default 30) is deleted for good by an hourly sweep (src/instrumentation.ts).
 

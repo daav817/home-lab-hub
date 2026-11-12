@@ -25,6 +25,13 @@ export async function register() {
   void warm();
   setInterval(warm, 60_000).unref();
 
+  // SRM recycle bins are measured in the background (a few seconds per share), so Manage >
+  // Trash shows their sizes at once: 2 minutes after start, then every 6 hours.
+  const { scanBins } = await import("./lib/recycle");
+  const measureBins = () => scanBins().catch((error) => console.error("Recycle bin check failed", error));
+  setTimeout(measureBins, 120_000).unref();
+  setInterval(measureBins, 6 * 3600_000).unref();
+
   // Upload-folder organizer: a run cut short by a restart is marked so, and the nightly run
   // is checked for every 5 minutes.
   const organizer = await import("./lib/organizer");
