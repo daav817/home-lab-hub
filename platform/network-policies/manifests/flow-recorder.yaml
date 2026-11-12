@@ -1,0 +1,115 @@
+# Flow recorder (network isolation, temporary): Goldmane keeps only about an hour of flows, but
+# the rules have to cover a full day (nightly backups at 3:30 and 5:30, snapshots, cron jobs).
+# Every 5 minutes this asks Whisker for the last 6 minutes of flows and logs each *new* kind of
+# connection once as a JSON line starting with "FLOW ". promtail ships it to Loki (kept 30 days):
+#   {namespace="monitoring", app="flow-recorder"} |= "FLOW "
+# A connection is: source namespace/workload -> destination namespace/workload, protocol, port,
+# and what the enforced and staged (pending) policies decided. Remove this once every namespace
+# is enforced.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-recorder
+  namespace: monitoring
+data:
+  record.py: |
+    import json, time, urllib.request
+    URL = "http://whisker.calico-system.svc:8081/whisker-backend/flows?watch=false&startTimeGte=-360&pageSize=10000"
+    seen = set()
+
+    def verdicts(policies, kind):
+        return [f"{p.get('kind')}:{p.get('namespace') or ''}/{p.get('name')}={p.get('action')}"
+                for p in (policies or {}).get(kind) or []]
+
+    while True:
+        try:
+            with urllib.request.urlopen(URL, timeout=60) as r:
+                items = json.load(r).get("items") or []
+            for f in items:
+                pol = f.get("policies")
+                rec = {
+                    "src": f"{f.get('source_namespace') or '-'}/{f.get('source_name')}",
+                    "dst": f"{f.get('dest_namespace') or '-'}/{f.get('dest_name')}",
+                    "proto": f.get("protocol"), "port": f.get("dest_port"),
+                    "reporter": f.get("reporter"), "action": f.get("action"),
+                    "pending": verdicts(pol, "pending"), "enforced": verdicts(pol, "enforced"),
+                }
+                key = json.dumps(rec, sort_keys=True)
+                if key not in seen:
+                    seen.add(key)
+                    print("FLOW " + key, flush=True)
+            print(f"ok {len(items)} flows, {len(seen)} kinds", flush=True)
+        except Exception as e:  # keep going; one failed poll only loses 5 minutes
+            print(f"error {e}", flush=True)
+        time.sleep(300)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow-recorder
+  namespace: monitoring
+  labels:
+    app: flow-recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flow-recorder
+  template:
+    metadata:
+      labels:
+        app: flow-recorder
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: recorder
+          image: python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576
+          command: ["python", "-u", "/app/record.py"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: flow-recorder
+---
+# The operator's own policy lets nothing into Whisker (port-forward still works); this adds the
+# recorder. Kubernetes network policies add up, so this doesn't loosen anything else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: whisker-from-flow-recorder
+  namespace: calico-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: whisker
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app: flow-recorder
+      ports:
+        - port: 8081
+          protocol: TCP
