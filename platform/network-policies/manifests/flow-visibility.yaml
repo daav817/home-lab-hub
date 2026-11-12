@@ -1,0 +1,20 @@
+# Network isolation (Phase 7), step 1: see the traffic before blocking any of it.
+#
+# Goldmane collects a record of every connection between pods (and out of the cluster) from
+# Calico on each node, including which policy allowed it or would deny it. Whisker is its
+# web viewer. Neither changes what traffic is allowed.
+#
+# View: kubectl port-forward -n calico-system svc/whisker 8081:8081  ->  http://localhost:8081
+#
+# The isolation rules are written as Calico *staged* policies first: they block nothing, but
+# Whisker shows each connection they would have denied ("pending"). Once a namespace shows no
+# pending denials for normal use, its staged policies are promoted to enforced ones.
+apiVersion: operator.tigera.io/v1
+kind: Goldmane
+metadata:
+  name: default
+---
+apiVersion: operator.tigera.io/v1
+kind: Whisker
+metadata:
+  name: default
