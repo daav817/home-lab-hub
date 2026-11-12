@@ -11,7 +11,11 @@
 #
 # Protection against a bad router copy (ransomware, accidental delete): files that change or
 # disappear on the router aren't deleted off-site, they're moved to longhorn-replaced/<date>/
-# and kept 30 days. Cluster snapshots are kept 30 days.
+# and kept 14 days (two weeks to notice ransomware). Cluster snapshots are kept 30 days
+# (compressed by k3s, ~5-10 MB each).
+#
+# Cost (R2 free tier: 10 GB, 1M Class A, 10M Class B a month): ~6-9 GB stored at steady state.
+# --fast-list lists the bucket in one pass instead of one call per folder (~80% fewer Class A).
 #
 # Restore (outline; see docs/architecture.html runbook): configure the same three rclone
 # remotes on any machine (r2 = S3 provider Cloudflare, offsite = crypt over r2:<bucket>/home-lab
@@ -38,7 +42,7 @@ data:
     unset CIFS_PASSWORD CRYPT_PASSWORD CRYPT_SALT
 
     today=$(date -u +%Y-%m-%d)
-    flags="--stats 5m --stats-one-line --stats-log-level NOTICE"
+    flags="--fast-list --stats 5m --stats-one-line --stats-log-level NOTICE"
 
     echo "1/4 Longhorn backups: router k8s-storage-folder -> R2"
     # SRM's recycle bin (#recycle) isn't copied.
@@ -47,13 +51,13 @@ data:
 
     echo "2/4 cluster state: k3s etcd snapshots -> R2"
     rclone copy /etcd-snapshots offsite:etcd --max-age 72h $flags
-    rclone delete offsite:etcd --min-age 30d
+    rclone delete offsite:etcd --min-age 30d --fast-list
 
-    echo "3/4 replaced files older than 30 days"
-    cutoff=$(date -u -d "@$(( $(date +%s) - 30 * 86400 ))" +%Y-%m-%d)
+    echo "3/4 replaced files older than 14 days"
+    cutoff=$(date -u -d "@$(( $(date +%s) - 14 * 86400 ))" +%Y-%m-%d)
     for dir in $(rclone lsf --dirs-only offsite:longhorn-replaced 2>/dev/null); do
       name=${dir%/}
-      if [ "$name" \< "$cutoff" ]; then echo "removing longhorn-replaced/$name"; rclone purge "offsite:longhorn-replaced/$name"; fi
+      if [ "$name" \< "$cutoff" ]; then echo "removing longhorn-replaced/$name"; rclone purge --fast-list "offsite:longhorn-replaced/$name"; fi
     done
 
     echo "4/4 check: every router file is off-site at the same size"
