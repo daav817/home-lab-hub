@@ -1,0 +1,21 @@
+# Grafana's Loki data source, kept in git so Grafana's volume needs no backup (2026-11-12).
+# It was first added in the web interface; the same uid keeps dashboards and Explore links
+# pointing at it. Grafana's datasource sidecar loads ConfigMaps labelled grafana_datasource=1.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-loki
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: loki
+        uid: dfx2wawilh81sf
+        type: loki
+        access: proxy
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        isDefault: false
+        editable: false
