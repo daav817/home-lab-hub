@@ -73,7 +73,7 @@ spec:
   schedule: "30 5 * * *"
   timeZone: America/New_York
   # Off until scripts/seal-offsite-backup.ps1 has sealed the R2 key and encryption password.
-  suspend: true
+  suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
