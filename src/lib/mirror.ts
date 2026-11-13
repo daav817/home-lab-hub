@@ -4,10 +4,15 @@
 //   photo -> media-backup/photo, video -> media-backup/video, music -> media-backup/music
 //
 // A run copies what's new or changed (rclone compares size and time, so only differences
-// move) and never deletes on its own. Files that are on the backup but no longer on the main
-// drive are listed in mirror_pending; they're deleted from the backup only after an admin
-// reviews and confirms them on the Files page. When everything is confirmed, both drives hold
-// the same files.
+// move). Then it compares the two drives:
+// - A file on the backup at a path the main drive doesn't have, whose name and size match a
+//   main-drive file that is already backed up in its own folder, is an old copy of a file that
+//   was moved (the organizer files photos into month folders). It's deleted from the backup,
+//   so the backup keeps one copy, in the same folder as on the main drive.
+// - Anything else on the backup only is listed in mirror_pending and never deleted on its own.
+//   An admin reviews it on the Files page and either copies it back to the main drive (same
+//   folder) or deletes it from the backup.
+// When the list is empty, both drives hold the same files in the same folders.
 //
 // When: right after the organizer finishes a run that moved files (uploads -> photo/video),
 // and once a night at the organizer's hour even if nothing was uploaded (changes made from
@@ -21,6 +26,9 @@ export function mirrorConfig(env: Record<string, string | undefined> = process.e
   return {
     target: env.MIRROR_TARGET ?? "media-backup",
     shares: (env.MIRROR_SHARES ?? "photo,video,music").split(",").map((s) => s.trim()).filter(Boolean),
+    // How the router names the two USB drives, for messages.
+    mainDrive: env.MIRROR_MAIN_DRIVE ?? "usbshare1",
+    backupDrive: env.MIRROR_BACKUP_DRIVE ?? "usbshare2",
   };
 }
 
@@ -34,11 +42,29 @@ export function excluded(path: string) {
     ["desktop.ini", "thumbs.db", ".ds_store"].includes(name.toLowerCase());
 }
 
-// Paths on the backup that the main drive no longer has.
-export function onlyOnBackup(main: Iterable<string>, backup: Map<string, number>): { path: string; size: number }[] {
-  const have = new Set(main);
-  return [...backup].filter(([path]) => !have.has(path) && !excluded(path)).map(([path, size]) => ({ path, size }))
-    .sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+const fileName = (path: string) => (path.split("/").at(-1) ?? "").toLowerCase();
+
+// Sorts the backup's files that the main drive doesn't have at the same path:
+//   moved:  same name and size as a main-drive file whose own backup copy (same folder) is
+//           already there with that size, so this one is a spare copy and safe to delete
+//   review: everything else (really gone from the main drive, or a different version)
+export function compareDrives(main: Map<string, number>, backup: Map<string, number>) {
+  const byName = new Map<string, { path: string; size: number }[]>();
+  for (const [path, size] of main) {
+    const list = byName.get(fileName(path)) ?? [];
+    list.push({ path, size });
+    byName.set(fileName(path), list);
+  }
+  const moved: string[] = [];
+  const review: { path: string; size: number }[] = [];
+  for (const [path, size] of backup) {
+    if (main.has(path) || excluded(path)) continue;
+    const twin = (byName.get(fileName(path)) ?? []).some((m) => m.size === size && backup.get(m.path) === size);
+    if (twin) moved.push(path);
+    else review.push({ path, size });
+  }
+  const order = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+  return { moved: moved.sort(order), review: review.sort((a, b) => order(a.path, b.path)) };
 }
 
 // --- Settings ----------------------------------------------------------------------------------
@@ -58,7 +84,10 @@ export async function setMirrorEnabled(enabled: boolean) {
 // --- Runs --------------------------------------------------------------------------------------
 
 export type MirrorStatus = "running" | "stopping" | "done" | "failed" | "stopped" | "interrupted";
-export type ShareResult = { share: string; copied: number; bytes: number; errors: number; error?: string; pending: number };
+// tidied: spare copies of moved files removed from the backup (see compareDrives).
+export type ShareResult = {
+  share: string; copied: number; bytes: number; errors: number; error?: string; pending: number; tidied?: number;
+};
 export type MirrorRun = {
   id: number; trigger: string; actor: string; status: MirrorStatus;
   copied: number; copiedBytes: number; errors: number;
@@ -167,19 +196,33 @@ async function allFiles(fs: string): Promise<Map<string, number>> {
   return new Map((data.list ?? []).filter((i) => !i.IsDir).map((i) => [i.Path, Math.max(0, i.Size)]));
 }
 
-// After a copy: what's on the backup but gone from the main drive becomes the pending list for
-// that share (replacing the last one).
-async function findRemoved(share: string, target: string): Promise<number> {
+// After a copy: spare copies of moved files are removed from the backup, and what's left on
+// the backup only becomes the review list for that share (replacing the last one).
+async function compareShare(share: string, target: string): Promise<{ pending: number; tidied: number }> {
   const [main, backup] = await Promise.all([allFiles(`router:${share}`), allFiles(`router:${target}/${share}`)]);
-  const removed = onlyOnBackup(main.keys(), backup);
+  const { moved, review } = compareDrives(main, backup);
+  let tidied = 0;
+  for (const path of moved) {
+    if (state.stopRequested) break;
+    try {
+      await rc("operations/deletefile", { fs: `router:${target}/${share}`, remote: path });
+      tidied++;
+    } catch (error) {
+      if (error instanceof FilesError && error.status === 404) continue;
+      review.push({ path, size: backup.get(path) ?? 0 }); // couldn't remove it: list it rather than lose track
+    }
+  }
   await sql.begin(async (tx) => {
     await tx`delete from mirror_pending where share = ${share}`;
-    for (let i = 0; i < removed.length; i += 500) {
-      const rows = removed.slice(i, i + 500).map((r) => ({ share, path: r.path, size: r.size }));
+    for (let i = 0; i < review.length; i += 500) {
+      const rows = review.slice(i, i + 500).map((r) => ({ share, path: r.path, size: r.size }));
       await tx`insert into mirror_pending ${tx(rows, "share", "path", "size")}`;
     }
   });
-  return removed.length;
+  if (tidied) {
+    await recordAudit("hub", "files.backup-tidied", `${target}/${share}`, { removed: tidied, files: moved.slice(0, 200) }).catch(() => {});
+  }
+  return { pending: review.length, tidied };
 }
 
 async function work(run: MirrorRun) {
@@ -193,7 +236,7 @@ async function work(run: MirrorRun) {
       try {
         result = await copyShare(run, share, target);
         // Only a complete copy says what's missing from the main drive.
-        if (!result.error) result.pending = await findRemoved(share, target);
+        if (!result.error) Object.assign(result, await compareShare(share, target));
       } catch (error) {
         result = { share, copied: 0, bytes: 0, errors: 1, pending: 0, error: error instanceof Error ? error.message : "failed" };
       }
@@ -311,4 +354,28 @@ export async function deleteFromBackup(items: { share: string; path: string }[])
     }
   }
   return { deleted, kept, failed };
+}
+
+// Copies the chosen files from the backup back to the main drive, into the same folder. One the
+// main drive has again since the last run is left alone (never overwritten).
+export async function copyBackToMain(items: { share: string; path: string }[]): Promise<{ copied: number; kept: number; failed: number }> {
+  const { target, shares } = mirrorConfig();
+  let copied = 0, kept = 0, failed = 0;
+  for (const { share, path } of items) {
+    if (!shares.includes(share) || !path || path.split("/").some((p) => p === ".." || p === "") || excluded(path)) continue;
+    const [row] = await sql`select 1 from mirror_pending where share = ${share} and path = ${path}`;
+    if (!row) continue;
+    try {
+      if (await onMain(share, path)) {
+        kept++;
+      } else {
+        await rc("operations/copyfile", { srcFs: `router:${target}/${share}`, srcRemote: path, dstFs: `router:${share}`, dstRemote: path });
+        copied++;
+      }
+      await sql`delete from mirror_pending where share = ${share} and path = ${path}`;
+    } catch {
+      failed++;
+    }
+  }
+  return { copied, kept, failed };
 }

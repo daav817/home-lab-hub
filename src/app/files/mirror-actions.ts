@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/access";
 import { recordAudit } from "@/lib/db";
 import { FilesError } from "@/lib/files";
 import {
-  deleteFromBackup, listPending, mirrorStatus, setMirrorEnabled, startMirror, stopMirror, type MirrorRun, type Pending,
+  copyBackToMain, deleteFromBackup, listPending, mirrorStatus, setMirrorEnabled, startMirror, stopMirror, type MirrorRun, type Pending,
 } from "@/lib/mirror";
 
 export type MirrorState = { error?: string; done?: string };
@@ -14,7 +14,7 @@ export type MirrorView = {
   pending: Pending[];
   pendingCount: number;
   pendingBytes: number;
-  config: { target: string; shares: string[] };
+  config: { target: string; shares: string[]; mainDrive: string; backupDrive: string };
 };
 
 // The review list shows at most this many; "Delete all" still covers every one.
@@ -75,13 +75,31 @@ export async function stopMirrorRun(): Promise<MirrorState> {
   });
 }
 
-// items: the reviewed files, or "all" for every file on the pending list.
+async function chosenItems(items: { share: string; path: string }[] | "all") {
+  return items === "all"
+    ? (await listPending()).map((p) => ({ share: p.share, path: p.path }))
+    : Array.isArray(items) ? items.map((i) => ({ share: String(i.share), path: String(i.path) })) : [];
+}
+
+// items: the reviewed files, or "all" for every file on the review list.
+export async function confirmCopyBack(items: { share: string; path: string }[] | "all"): Promise<MirrorState> {
+  return guard(async () => {
+    const user = await requireAdmin();
+    const chosen = await chosenItems(items);
+    if (chosen.length === 0) return { error: "Pick some files first." };
+    const result = await copyBackToMain(chosen);
+    await recordAudit(user.name, "files.backup-copy-back", "media backup", { ...result, files: chosen.slice(0, 200).map((c) => `${c.share}/${c.path}`) });
+    const parts = [`Copied ${result.copied} file${result.copied === 1 ? "" : "s"} back to the main drive.`];
+    if (result.kept) parts.push(`${result.kept} already there again.`);
+    if (result.failed) parts.push(`${result.failed} couldn't be copied; they stay on the list.`);
+    return result.failed && !result.copied ? { error: parts.join(" ") } : { done: parts.join(" ") };
+  });
+}
+
 export async function confirmBackupDeletes(items: { share: string; path: string }[] | "all"): Promise<MirrorState> {
   return guard(async () => {
     const user = await requireAdmin();
-    const chosen = items === "all"
-      ? (await listPending()).map((p) => ({ share: p.share, path: p.path }))
-      : Array.isArray(items) ? items.map((i) => ({ share: String(i.share), path: String(i.path) })) : [];
+    const chosen = await chosenItems(items);
     if (chosen.length === 0) return { error: "Pick some files first." };
     const result = await deleteFromBackup(chosen);
     await recordAudit(user.name, "files.backup-delete", "media backup", { ...result, files: chosen.slice(0, 200).map((c) => `${c.share}/${c.path}`) });

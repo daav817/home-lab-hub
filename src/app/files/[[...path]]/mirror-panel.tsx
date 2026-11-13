@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { formatBytes } from "@/lib/files";
 import {
-  confirmBackupDeletes, getMirrorView, runMirror, setMirror, stopMirrorRun, type MirrorState, type MirrorView,
+  confirmBackupDeletes, confirmCopyBack, getMirrorView, runMirror, setMirror, stopMirrorRun, type MirrorState, type MirrorView,
 } from "@/app/files/mirror-actions";
 import { ConfirmDialog } from "./confirm-dialog";
 
@@ -32,6 +32,7 @@ export function MirrorPanel() {
   const [pending, startTransition] = useTransition();
   const [reviewing, setReviewing] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [choice, setChoice] = useState<"copy" | "delete">("copy");
 
   const refresh = useCallback(() => {
     getMirrorView().then(setView).catch(() => {});
@@ -59,6 +60,7 @@ export function MirrorPanel() {
 
   if (!view) return null;
   const { run, config } = view;
+  const backupPlace = `${config.backupDrive} › ${config.target}`;
   const key = (p: { share: string; path: string }) => `${p.share}/${p.path}`;
   const pickedItems = view.pending.filter((p) => picked.has(key(p)));
 
@@ -72,8 +74,9 @@ export function MirrorPanel() {
         </label>
       </div>
       <p className="text-muted text-sm">
-        Copies {config.shares.join(", ")} to the same folders in {config.target} on the backup drive: right after new uploads
-        are sorted, and every night. Nothing is deleted from the backup until you confirm it below.
+        Copies {config.shares.join(", ")} from the main drive ({config.mainDrive}) to the same folders in {backupPlace}: right
+        after new uploads are sorted, and every night. When a file has moved to another folder on the main drive, the backup
+        keeps only the copy in the new folder. Files that are only on the backup are never deleted unless you choose to below.
       </p>
 
       {run && (
@@ -96,6 +99,7 @@ export function MirrorPanel() {
           {run.shares.map((s) => (
             <span key={s.share} className={s.error ? "text-(--down)" : "text-muted"}>
               {s.share}: {s.error ? s.error : `${s.copied} file${s.copied === 1 ? "" : "s"} copied (${formatBytes(s.bytes)})`}
+              {s.tidied ? `, ${s.tidied} spare cop${s.tidied === 1 ? "y" : "ies"} of moved files removed from the backup` : ""}
               {s.errors ? `, ${s.errors} error${s.errors === 1 ? "" : "s"}` : ""}
             </span>
           ))}
@@ -119,14 +123,17 @@ export function MirrorPanel() {
       {view.pendingCount > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded border border-(--down) px-4 py-3 text-sm">
           <span className="flex-1">
-            <span className="font-medium">{view.pendingCount} file{view.pendingCount === 1 ? " was" : "s were"} removed from the main drive</span>{" "}
-            ({formatBytes(view.pendingBytes)}) but {view.pendingCount === 1 ? "is" : "are"} still on the backup.
+            <span className="font-medium">
+              {view.pendingCount} file{view.pendingCount === 1 ? " is" : "s are"} only on the backup drive
+            </span>{" "}
+            ({formatBytes(view.pendingBytes)} in {backupPlace}), not on the main drive ({config.mainDrive}).
           </span>
           <button
             type="button"
             className="btn-quiet"
             onClick={() => {
               setPicked(new Set(view.pending.map(key)));
+              setChoice("copy");
               setReviewing(true);
             }}
           >
@@ -137,21 +144,42 @@ export function MirrorPanel() {
 
       <ConfirmDialog
         open={reviewing}
-        title="Delete from the backup?"
-        confirmLabel={`Delete ${pickedItems.length} from the backup`}
-        danger
+        title="Files only on the backup drive"
+        confirmLabel={
+          choice === "copy"
+            ? `Copy ${pickedItems.length} back to the main drive (${config.mainDrive})`
+            : `Permanently delete ${pickedItems.length} from ${backupPlace}`
+        }
+        danger={choice === "delete"}
         busy={pending}
         onCancel={() => setReviewing(false)}
         onConfirm={() => {
           if (pickedItems.length === 0) return;
           const all = pickedItems.length === view.pendingCount;
-          act(() => confirmBackupDeletes(all ? "all" : pickedItems.map((p) => ({ share: p.share, path: p.path }))), () => setReviewing(false));
+          const items = all ? "all" as const : pickedItems.map((p) => ({ share: p.share, path: p.path }));
+          act(() => (choice === "copy" ? confirmCopyBack(items) : confirmBackupDeletes(items)), () => setReviewing(false));
         }}
       >
         <p>
-          These files are no longer on the main drive. Deleting them from {config.target} makes the two drives match again,
-          and they can&apos;t be recovered afterwards. Untick anything you want to keep: to keep a file for good, put it back on the main drive.
+          These files are on the backup drive ({backupPlace}) but not on the main drive ({config.mainDrive}), and no file with
+          the same name and size is anywhere on the main drive. Choose what to do with the ticked ones:
         </p>
+        <fieldset className="flex flex-col gap-1">
+          <label className="flex items-start gap-2">
+            <input type="radio" name="backup-choice" checked={choice === "copy"} onChange={() => setChoice("copy")} />
+            <span>
+              <span className="font-medium">Copy back to the main drive</span> ({config.mainDrive}, same folder). Nothing is
+              deleted; the next backup then finds both drives the same.
+            </span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="radio" name="backup-choice" checked={choice === "delete"} onChange={() => setChoice("delete")} />
+            <span>
+              <span className="font-medium">Delete from the backup drive</span> ({backupPlace}). Only for files you removed from
+              the main drive on purpose. The backup drive has no recycle bin: deleted files can&apos;t be recovered.
+            </span>
+          </label>
+        </fieldset>
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
