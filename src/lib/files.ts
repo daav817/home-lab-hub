@@ -95,11 +95,27 @@ export function inlineType(name: string): string | null {
   return INLINE[extension(name)] ?? null;
 }
 
+// Formats browsers can't play, converted on the fly by /api/files/play (ffmpeg in the hub
+// image): audio to MP3, video to MP4. The file on the router is never changed.
+const CONVERT: Record<string, "audio" | "video"> = {
+  wma: "audio",
+  avi: "video", mts: "video", m2ts: "video", "3gp": "video", "3g2": "video", mpg: "video", mpeg: "video", wmv: "video",
+};
+
+export function convertKind(name: string): "audio" | "video" | null {
+  return CONVERT[extension(name)] ?? null;
+}
+
+// Where the viewer's player gets a file: straight from the router, or through the converter.
+export function mediaHref(path: FilePath) {
+  return convertKind(path.parts.at(-1) ?? "") ? `/api/files/play?path=${encodeURIComponent(joinPath(path))}` : rawHref(path);
+}
+
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | null;
 
 export function previewKind(name: string): PreviewKind {
   const type = inlineType(name);
-  if (!type) return null;
+  if (!type) return convertKind(name);
   if (type.startsWith("image/")) return "image";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { applyFilters, isFiltered, NO_FILTERS, type Filters } from "@/lib/file-filters";
-import { folderHref, formatBytes, joinPath, previewKind, rawHref, type Entry, type FilePath } from "@/lib/files";
+import { convertKind, folderHref, formatBytes, joinPath, mediaHref, previewKind, rawHref, type Entry, type FilePath } from "@/lib/files";
 import { planMoves } from "@/lib/media";
 import { deleteEntries, newFolder, renameEntry, type FileActionState } from "../actions";
 import { organizeSelected } from "../organize-actions";
@@ -327,9 +327,14 @@ export function FileBrowser({ folder, entries, canManage, organize, atSource, ti
               <img key={viewing.name} src={rawHref(pathOf(viewing))} alt={viewing.name} className="max-h-full max-w-full object-contain" />
             )}
             {previewKind(viewing.name) === "video" && (
-              <video key={viewing.name} src={rawHref(pathOf(viewing))} controls autoPlay playsInline className="max-h-full max-w-full" />
+              <video key={viewing.name} src={mediaHref(pathOf(viewing))} controls autoPlay playsInline className="max-h-full max-w-full" />
             )}
-            {previewKind(viewing.name) === "audio" && <audio key={viewing.name} src={rawHref(pathOf(viewing))} controls autoPlay />}
+            {previewKind(viewing.name) === "audio" && <audio key={viewing.name} src={mediaHref(pathOf(viewing))} controls autoPlay />}
+            {convertKind(viewing.name) && (
+              <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded bg-black/60 px-3 py-1 text-xs text-white">
+                Converted while it plays: it can take a few seconds to start, and skipping ahead is limited.
+              </p>
+            )}
           </div>
         </div>
       )}

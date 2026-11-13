@@ -23,6 +23,10 @@ ENV APP_VERSION=$APP_VERSION
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# ffmpeg converts router media browsers can't play (WMA, AVI, MTS...) while it streams
+# (src/lib/convert.ts, /api/files/play).
+RUN apk add --no-cache ffmpeg
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 # The app runs on node alone, so the package managers don't ship in the final image.
