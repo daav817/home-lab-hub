@@ -1,0 +1,225 @@
+# Network isolation (Phase 7), step 2: per-namespace rules for the small web apps.
+#
+# Every namespace gets the same shape:
+#   default-deny  nothing in or out unless another rule below allows it
+#   allow-dns     every pod may look up names (CoreDNS)
+#   allow-...     the callers and destinations actually seen by the flow recorder
+#
+# These start as Calico *staged* policies (StagedKubernetesNetworkPolicy): they block nothing,
+# and Whisker / the flow recorder show each connection they would have denied as a "pending"
+# Deny. To enforce a namespace, change its policies' apiVersion/kind to
+# networking.k8s.io/v1 NetworkPolicy (the spec stays exactly the same).
+#
+# Notes that apply to all files:
+# - Kubernetes NetworkPolicies add up: a pod is allowed whatever any policy selecting it allows.
+# - Traffic from a node to its own pods (kubelet health checks) is always allowed.
+# - LAN visitors of a LoadBalancer IP (externalTrafficPolicy: Cluster) arrive with a node's
+#   address, so "the LAN" (192.168.1.0/24) covers them.
+# - "Internet" = any address outside the private ranges, so pods can't reach the LAN, the router
+#   or the nodes unless a rule names them.
+# - Callers of a web app: cloudflared (public routes), Traefik (LAN *.nip.io names and
+#   forward-auth routes) and the hub (status lights).
+
+# ---------------------------------------------------------------- pdf-edit
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: pdf-edit
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: pdf-edit
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-pdf-edit
+  namespace: pdf-edit
+spec:
+  podSelector: {matchLabels: {app: pdf-edit}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+      ports: [{port: 8000, protocol: TCP}]
+  egress:
+    # Signs people in through Energia.
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: energia}}
+      ports: [{port: 3000, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- energia-web
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: energia-web
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: energia-web
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-energia-website
+  namespace: energia-web
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: energia-website}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+        - ipBlock: {cidr: 192.168.1.0/24}   # LAN, LoadBalancer 192.168.1.242
+      ports: [{port: 3000, protocol: TCP}]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- godseye
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: godseye
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: godseye
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-godseye
+  namespace: godseye
+spec:
+  podSelector: {matchLabels: {app: godseye}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+        - ipBlock: {cidr: 192.168.1.0/24}   # LAN, LoadBalancer 192.168.1.244
+      ports: [{port: 8080, protocol: TCP}]
+  egress:
+    # Downloads public map/feed data.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- investco
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: investco
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: investco
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# The scheduled jobs (backups, Schwab sync, screener, signals) call the app and the database
+# inside the namespace; the database keeps its own investco-postgres-allow-app-only rule.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-within-namespace
+  namespace: investco
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-investco
+  namespace: investco
+spec:
+  podSelector: {matchLabels: {app: investco}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+        - podSelector: {}   # the namespace's own jobs
+      ports: [{port: 3000, protocol: TCP}]
+  egress:
+    # Schwab and market-data APIs.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]

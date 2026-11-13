@@ -8,6 +8,10 @@ Work through these in order. An app must not get a public address until it is pr
 - `ghcr-pull-secret` copied into its namespace. See [copy-pull-secret.md](copy-pull-secret.md).
 - Secrets stored as Sealed Secrets, never as plain values in git.
 - `storageClassName: longhorn` on every volume. The cluster has two default classes, so always set it.
+- Network rules. Most namespaces block all traffic that isn't explicitly allowed. Copy one
+  namespace's block from `platform/network-policies/manifests/isolation-web-apps.yaml`: default
+  deny, DNS, and who may call the app (cloudflared, Traefik, hub). If the hub should show a status
+  light for it, add the new namespace to the `allow-hub` list in `isolation-core.yaml`.
 
 ## 2. Decide how it is protected
 

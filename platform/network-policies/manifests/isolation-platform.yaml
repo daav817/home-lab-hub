@@ -1,0 +1,274 @@
+# Network isolation (Phase 7), step 2: cameras, Traefik and monitoring. Same shape and
+# staged-first approach as isolation-web-apps.yaml (read its header first).
+#
+# Not covered yet, on purpose: kube-system, longhorn-system, calico-system, metallb-system,
+# tigera-operator (cluster plumbing: a mistake there takes down storage or networking for every
+# app) and argocd (ships its own policies).
+
+# ---------------------------------------------------------------- cameras
+# Ingress is already limited by the per-app rules in platform/cameras (frigate, neolink,
+# blink-bridge, clip-keeper); these add the outbound side.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: cameras
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: cameras
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# Frigate reads the Neolink and Blink streams, the keeper reads Frigate, and everything except
+# the GPU plugin talks to Mosquitto. (The Blink bridge's and keeper's MQTT connections predate
+# the flow recorder, which is why they aren't in the recording.)
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-within-namespace-and-mqtt
+  namespace: cameras
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: home-assistant}}
+          podSelector: {matchLabels: {app: mosquitto}}
+      ports: [{port: 1883, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-neolink-cameras
+  namespace: cameras
+spec:
+  podSelector: {matchLabels: {app: neolink}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock: {cidr: 192.168.0.0/24}   # IOT network (Reolink E1s), reached through worker-02
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-frigate
+  namespace: cameras
+spec:
+  podSelector: {matchLabels: {app: frigate}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock: {cidr: 192.168.1.102/32}   # host-network streams on worker-02
+      ports: [{port: 8554, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-blink-bridge
+  namespace: cameras
+spec:
+  podSelector: {matchLabels: {app: blink-bridge}}
+  policyTypes: ["Egress"]
+  egress:
+    # Blink's cloud and live-view servers.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-clip-keeper
+  namespace: cameras
+spec:
+  podSelector: {matchLabels: {app: clip-keeper}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock: {cidr: 192.168.1.1/32}   # camera-clips share on the router
+      ports: [{port: 445, protocol: TCP}]
+---
+# ---------------------------------------------------------------- traefik
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: traefik
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: traefik
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# Traefik routes to whatever the Ingresses name, so it may reach any pod; each app's own rule
+# decides the port. It needs no internet (Cloudflare holds the certificates).
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-traefik
+  namespace: traefik
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - ipBlock: {cidr: 192.168.1.0/24}   # LAN, LoadBalancer 192.168.1.243
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+      ports: [{port: 8000, protocol: TCP}, {port: 8443, protocol: TCP}]
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+      ports: [{port: 9100, protocol: TCP}]
+  egress:
+    - to:
+        - namespaceSelector: {}
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}   # Kubernetes API (watches Ingresses)
+      ports: [{port: 6443, protocol: TCP}]
+---
+# ---------------------------------------------------------------- monitoring
+# Kept broad inside the namespace: Prometheus, Grafana, Loki, Alertmanager and their helpers
+# talk to each other in many ways. What this blocks is other namespaces reaching in, and
+# everything here reaching the LAN.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-within-namespace
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}   # Kubernetes API (operator, promtail, Grafana, Loki)
+      ports: [{port: 6443, protocol: TCP}]
+    # Grafana plugins, Loki usage report, Alertmanager email (Gmail SMTP).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-web-uis
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+      ports:
+        - {port: 3000, protocol: TCP}   # Grafana
+        - {port: 9090, protocol: TCP}   # Prometheus
+        - {port: 9093, protocol: TCP}   # Alertmanager
+---
+# The API server (host network on openclaw) calls the Prometheus operator's admission webhook.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-operator-webhook
+  namespace: monitoring
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator}}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - ipBlock: {cidr: 192.168.1.0/24}
+      ports: [{port: 10250, protocol: TCP}]
+---
+# Prometheus scrapes pods in every namespace and the nodes (node-exporter 9100, kubelet 10250).
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: monitoring
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: prometheus}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {}
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}
+        - ipBlock: {cidr: 192.168.1.101/32}
+        - ipBlock: {cidr: 192.168.1.102/32}
+      ports: [{port: 9100, protocol: TCP}, {port: 10250, protocol: TCP}, {port: 6443, protocol: TCP}]
+---
+# The flow recorder reads Whisker (temporary, see flow-recorder.yaml).
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-flow-recorder
+  namespace: monitoring
+spec:
+  podSelector: {matchLabels: {app: flow-recorder}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: calico-system}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: whisker}}
+      ports: [{port: 8081, protocol: TCP}]

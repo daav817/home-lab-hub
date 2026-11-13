@@ -1,0 +1,315 @@
+# Network isolation (Phase 7), step 2: default (cloudflared, Energia, Petros), hub, Authentik,
+# MeshCentral and Mosquitto. Same shape and staged-first approach as isolation-web-apps.yaml
+# (read its header first).
+
+# ---------------------------------------------------------------- default
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# The Cloudflare tunnel. Its routes are set in the Cloudflare dashboard, so it may reach any pod;
+# each app's own ingress rule decides which ports it really gets.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-cloudflared
+  namespace: default
+spec:
+  podSelector: {matchLabels: {app: cloudflared}}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {}
+    - to:
+        - ipBlock: {cidr: 192.168.1.102/32}   # Home Assistant (host network on worker-02)
+      ports: [{port: 8123, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-energia
+  namespace: default
+spec:
+  podSelector: {matchLabels: {app: energia}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: pdf-edit}}
+        - ipBlock: {cidr: 192.168.1.0/24}   # LAN, LoadBalancer 192.168.1.241
+      ports: [{port: 3000, protocol: TCP}]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: energia-postgres}}
+      ports: [{port: 5432, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-energia-postgres
+  namespace: default
+spec:
+  podSelector: {matchLabels: {app: energia-postgres}}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: energia}}
+      ports: [{port: 5432, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-petros-ai
+  namespace: default
+spec:
+  podSelector: {matchLabels: {app: petros-ai}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+        - ipBlock: {cidr: 192.168.1.0/24}   # LAN, LoadBalancer 192.168.1.240
+      ports: [{port: 8080, protocol: TCP}]
+  egress:
+    # Supabase (5432/6543) and the Google Cloud Storage bucket.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# CronJob pods (petros-export: Supabase dump + bucket copy to its own volume).
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-jobs-internet
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions: [{key: batch.kubernetes.io/job-name, operator: Exists}]
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- hub
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: hub
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: hub
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# hub-postgres keeps its own rule (only the hub may connect) and needs nothing outbound.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-hub
+  namespace: hub
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: hub}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}   # /api/metrics
+      ports: [{port: 3000, protocol: TCP}]
+  egress:
+    # Status lights and the apps the hub manages. Each destination's own rule limits the port.
+    # A new app in a new namespace needs its namespace added here (docs/add-an-app.md).
+    - to:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [argocd, authentik, cameras, default, energia-web, godseye, hub, investco,
+                         longhorn-system, monitoring, pdf-edit, remote-access]
+    - to:
+        - ipBlock: {cidr: 192.168.1.1/32}     # router files (SMB)
+      ports: [{port: 445, protocol: TCP}]
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}   # Kubernetes API (Longhorn backups, Argo)
+      ports: [{port: 6443, protocol: TCP}]
+    - to:
+        - ipBlock: {cidr: 192.168.1.101/32}   # Wake-on-LAN relay
+      ports: [{port: 9009, protocol: TCP}]
+    - to:
+        - ipBlock: {cidr: 192.168.1.102/32}   # Home Assistant
+      ports: [{port: 8123, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- authentik
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: authentik
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: authentik
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# Server and worker: the database, each other, the Kubernetes API (outpost management) and the
+# internet (email through Resend, which is sent only now and then, so it never showed up in the
+# recorded flows). The chart's own authentik-postgresql policy is left as it is.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-authentik
+  namespace: authentik
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: authentik}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}   # forward auth
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}       # sign-in
+        - podSelector: {}
+      ports: [{port: 9000, protocol: TCP}, {port: 9443, protocol: TCP}]
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+      ports: [{port: 9300, protocol: TCP}]
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}
+      ports: [{port: 6443, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- remote-access
+# meshcentral keeps its own ingress rule (Traefik and hub on 8080). wol-relay uses the host
+# network, which these policies don't cover.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: remote-access
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: remote-access
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-meshcentral
+  namespace: remote-access
+spec:
+  podSelector: {matchLabels: {app: meshcentral}}
+  policyTypes: ["Egress"]
+  egress:
+    # Sign-in through auth.energiapower.llc (Cloudflare).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- home-assistant
+# Home Assistant itself uses the host network (not covered). Mosquitto keeps its own ingress
+# rule (Home Assistant's node and the cameras namespace) and needs nothing outbound.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: home-assistant
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: home-assistant
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
