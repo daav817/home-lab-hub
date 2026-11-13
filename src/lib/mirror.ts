@@ -67,8 +67,10 @@ export type MirrorRun = {
   startedAt: Date; finishedAt: Date | null;
 };
 
-type State = { active: MirrorRun | null; stopRequested: boolean; jobid: number | null };
-const state: State = ((globalThis as { __hubMirror?: State }).__hubMirror ??= { active: null, stopRequested: false, jobid: null });
+// again: the organizer sorted new files while a run was going (that run may have listed the
+// shares before they arrived), so another run starts when this one ends.
+type State = { active: MirrorRun | null; stopRequested: boolean; jobid: number | null; again: boolean };
+const state: State = ((globalThis as { __hubMirror?: State }).__hubMirror ??= { active: null, stopRequested: false, jobid: null, again: false });
 
 type Row = { id: number; trigger: string; actor: string; status: MirrorStatus; copied: number; copiedBytes: number; errors: number;
   detail: { shares?: ShareResult[] } | null; startedAt: Date; finishedAt: Date | null };
@@ -210,11 +212,18 @@ async function work(run: MirrorRun) {
     run.progress = null;
     run.finishedAt = new Date();
     await save(run, true).catch((error) => console.error("Backup: couldn't save run %s", run.id, error));
+    const stopped = state.stopRequested;
     state.active = null;
     state.stopRequested = false;
     await recordAudit(run.actor, "files.backup-finished", `run ${run.id}`, {
       trigger: run.trigger, status: run.status, copied: run.copied, bytes: run.copiedBytes, errors: run.errors,
     }).catch(() => {});
+    if (state.again) {
+      state.again = false;
+      if (!stopped && (await mirrorEnabled().catch(() => false))) {
+        await startMirror("hub", "after-organize").catch((error) => console.error("Backup: couldn't start the follow-up run", error));
+      }
+    }
   }
 }
 
@@ -243,7 +252,11 @@ export function stopMirror() {
 
 // The organizer calls this when a run ends: new photos and videos go to the backup right away.
 export async function afterOrganize(moved: number) {
-  if (moved <= 0 || state.active || !(await mirrorEnabled())) return;
+  if (moved <= 0 || !(await mirrorEnabled())) return;
+  if (state.active) {
+    state.again = true; // started when the current run ends
+    return;
+  }
   await startMirror("hub", "after-organize");
 }
 
