@@ -85,6 +85,28 @@ const migrations = [
      ('Remote desktop', 'Open the home PCs from anywhere (2FA each time)', 'https://mesh.energiapower.llc',
       'http://meshcentral.remote-access.svc.cluster.local:8080/health.ashx', 'Admin', 'admin', 95)
    on conflict (name) do nothing`,
+  // Backup of photo/video/music to the second router drive (src/lib/mirror.ts).
+  `create table mirror_runs (
+     id bigint generated always as identity primary key,
+     trigger text not null,
+     actor text not null,
+     status text not null,
+     copied integer not null default 0,
+     copied_bytes bigint not null default 0,
+     errors integer not null default 0,
+     detail jsonb,
+     started_at timestamptz not null default now(),
+     finished_at timestamptz
+   )`,
+  // Files on the backup that are no longer on the main drive: deleted only after an admin
+  // confirms them (Files page).
+  `create table mirror_pending (
+     share text not null,
+     path text not null,
+     size bigint not null default 0,
+     found_at timestamptz not null default now(),
+     primary key (share, path)
+   )`,
 ];
 
 export async function migrate() {

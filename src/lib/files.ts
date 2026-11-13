@@ -2,7 +2,8 @@
 // as the hub's own router account and serves every share as one WebDAV tree on 127.0.0.1
 // (downloads, uploads, renames) plus rclone's remote-control API (listings, free space,
 // folders, deletes). Which shares appear is decided on the router: any share that account can
-// open shows up here, except the ones in FILES_HIDDEN (the Longhorn backup share, the clips).
+// open shows up here, except the ones in FILES_HIDDEN (the Longhorn backup share, the clips,
+// and media-backup, which only the backup in src/lib/mirror.ts writes to).
 // Viewing is for family and admins; changes are admin-only and go in the audit log.
 
 import type { AccessLevel } from "./access";
@@ -66,7 +67,7 @@ export function rawHref(path: FilePath, download = false) {
 
 export function hiddenShares(): Set<string> {
   return new Set(
-    (process.env.FILES_HIDDEN ?? "k8s-storage-folder,camera-clips")
+    (process.env.FILES_HIDDEN ?? "k8s-storage-folder,camera-clips,media-backup")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),

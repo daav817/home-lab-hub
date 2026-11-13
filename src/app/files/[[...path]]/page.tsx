@@ -8,6 +8,7 @@ import {
 } from "@/lib/files";
 import { inSource, organizeConfig } from "@/lib/media";
 import { FileBrowser } from "./file-browser";
+import { MirrorPanel } from "./mirror-panel";
 
 type Params = { path?: string[] };
 
@@ -29,6 +30,7 @@ function UsageBar({ used, total }: { used: number; total: number }) {
 }
 
 async function Shares() {
+  const admin = (await currentUser()).level === "admin";
   let shares;
   try {
     shares = await listShares();
@@ -58,6 +60,7 @@ async function Shares() {
         {drives.length} drive{drives.length === 1 ? "" : "s"} · {formatBytes(drives.reduce((n, d) => n + d.free, 0))} free in all.
         Shares appear here when the hub&apos;s router account is given access to them in SRM.
       </p>
+      {admin && <MirrorPanel />}
     </>
   );
 }

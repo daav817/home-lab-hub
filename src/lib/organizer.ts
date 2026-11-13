@@ -235,7 +235,13 @@ async function work(run: Run, files: FilePath[], deadline: number | null, onFini
     state.active = null;
     state.stopRequested = false;
     await onFinish(run).catch(() => {});
+    // New photos and videos go to the backup drive straight away (src/lib/mirror.ts).
+    await import("./mirror").then((mirror) => mirror.afterOrganize(run.moved)).catch((error) => console.error("Backup after organize failed to start", error));
   }
+}
+
+export function isOrganizing() {
+  return state.active !== null;
 }
 
 type Listed = { Name: string; IsDir: boolean; Size: number; ModTime?: string };

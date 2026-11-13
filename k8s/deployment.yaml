@@ -51,7 +51,12 @@ spec:
               value: http://127.0.0.1:5572
             # Shares never shown, whatever the router account can open.
             - name: FILES_HIDDEN
-              value: k8s-storage-folder,camera-clips
+              value: k8s-storage-folder,camera-clips,media-backup
+            # Files page backup: photo, video and music copied to these folders on the second drive.
+            - name: MIRROR_TARGET
+              value: media-backup
+            - name: MIRROR_SHARES
+              value: photo,video,music
             - name: FILES_STAGING
               value: /staging
             # Manage > Computers: the Wake-on-LAN relay (platform/remote-access) and MeshCentral.

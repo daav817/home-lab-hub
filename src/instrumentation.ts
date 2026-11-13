@@ -45,4 +45,17 @@ export async function register() {
     }
   };
   setInterval(tick, 5 * 60_000).unref();
+
+  // Backup of photo/video/music to the second drive: a run cut short by a restart is marked so;
+  // the nightly run starts in the organizer's hour once the organizer is idle.
+  const mirror = await import("./lib/mirror");
+  await mirror.markInterrupted().catch((error) => console.error("Backup: couldn't mark old runs", error));
+  const mirrorTick = async () => {
+    try {
+      await mirror.nightlyTick(organizer.isOrganizing());
+    } catch (error) {
+      console.error("Backup nightly check failed", error);
+    }
+  };
+  setInterval(mirrorTick, 5 * 60_000).unref();
 }
