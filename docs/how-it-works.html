@@ -77,13 +77,15 @@
       <li><b>8</b>Keeping data safe: storage and backups</li>
       <li><b>9</b>Watching over everything: monitoring and alerts</li>
       <li><b>10</b>Cameras and the smart home</li>
-      <li><b>11</b>Four everyday stories, start to finish</li>
-      <li><b>12</b>Why each piece matters (summary table)</li>
-      <li><b>13</b>What's next</li>
-      <li><b>14</b>Glossary</li>
+      <li><b>11</b>Your files on the router</li>
+      <li><b>12</b>Your home PCs from anywhere</li>
+      <li><b>13</b>Five everyday stories, start to finish</li>
+      <li><b>14</b>Why each piece matters (summary table)</li>
+      <li><b>15</b>What's next, and what's being locked down</li>
+      <li><b>16</b>Glossary</li>
     </ol>
   </div>
-  <p class="small">Prepared November 9, 2026. It describes the system as it runs today: the hub, its apps, the three-computer cluster and the home network. Passwords, keys and private addresses are deliberately left out.</p>
+  <p class="small">Prepared November 9, 2026; updated November 13, 2026. It describes the system as it runs today: the hub, its apps, the three-computer cluster and the home network. Passwords, keys and private addresses are deliberately left out.</p>
 </div>
 
 <!-- 1. BIG PICTURE -->
@@ -313,7 +315,7 @@
         <rect x="6" y="30" width="170" height="130" rx="10" fill="#f0fdf4" stroke="#15803d"/>
         <text x="91" y="54" text-anchor="middle" font-size="12" font-weight="700">App data (Longhorn)</text>
         <text x="91" y="74" text-anchor="middle">each volume copied onto</text><text x="91" y="88" text-anchor="middle">more than one computer</text>
-        <text x="91" y="108" text-anchor="middle" fill="#5b6475">CRM · hub · Authentik</text><text x="91" y="121" text-anchor="middle" fill="#5b6475">Investco · Godseye</text><text x="91" y="134" text-anchor="middle" fill="#5b6475">Petros export · Grafana</text><text x="91" y="147" text-anchor="middle" fill="#5b6475">Home Assistant · Frigate settings</text>
+        <text x="91" y="108" text-anchor="middle" fill="#5b6475">CRM · hub · Authentik</text><text x="91" y="121" text-anchor="middle" fill="#5b6475">Investco · Godseye</text><text x="91" y="134" text-anchor="middle" fill="#5b6475">Petros export · MeshCentral</text><text x="91" y="147" text-anchor="middle" fill="#5b6475">Home Assistant · Frigate settings</text>
         <rect x="236" y="30" width="200" height="56" rx="10" fill="#eef2ff" stroke="#2563eb"/>
         <text x="336" y="53" text-anchor="middle" font-size="12" font-weight="700">Snapshots (2:00 AM daily)</text>
         <text x="336" y="71" text-anchor="middle">quick "undo points", kept 7 days</text>
@@ -338,7 +340,15 @@
     <div class="card t-blue"><h4>Petros nightly export <span>copy of a cloud app</span></h4><p>Petros keeps its database with a hosted service (Supabase) and its trained AI models with Google Cloud. Every night a job copies both to a volume at home, which then goes into the backups as well.</p></div>
     <div class="card t-violet"><h4>Restore tests <span>fire drills</span></h4><p>A backup is only useful if it restores. Scripts restore the newest backup into a separate test area and compare it with the live data. The CRM test on Nov 9 brought back all 45 tables; the only differences were rows added since 3:30 that morning.</p></div>
   </div>
-  <div class="callout amber"><b>Still to do</b>Today every backup sits in the house. A fire or theft could take the computers and the router together, so an off-site copy (another location or cloud storage) is planned for the hardening phase.</div>
+  <h3>A copy outside the house</h3>
+  <p>The router sits in the same house as the cluster, so a fire, flood or theft could take both. Since November 13, every night at 5:30 the router's backups and the cluster's own "memory" (its list of every app, setting and password) are also copied to <b>Cloudflare R2</b>, an online storage service.</p>
+  <div class="tech">
+    <div class="card t-teal"><h4>Cloudflare R2 <span>bank vault in another town</span></h4><p>Holds an encrypted copy: Cloudflare sees only scrambled data, even the file names. About 1.4 GB today, expected to settle at 2.5–4 GB, inside the free 10 GB. It can be switched off at any time by deleting the data.</p></div>
+    <div class="card t-amber"><h4>Password and salt <span>the vault key</span></h4><p>The copy can only be read with two values kept in the owner's password manager. If the house, the computers and the router were all lost, those two values plus a new Cloudflare key are enough to bring everything back.</p></div>
+    <div class="card t-green"><h4>Second-chance window <span>undo for ransomware</span></h4><p>If files on the router are changed or deleted (by mistake, or by ransomware), the off-site copy keeps the old versions for 14 days instead of copying the damage over them.</p></div>
+    <div class="card t-blue"><h4>Checked every night <span>count the boxes</span></h4><p>The last step of each run compares every file on the router with the online copy. The first run on Nov 13 matched all 3,125 files, and an email alert goes out if a run fails.</p></div>
+  </div>
+  <div class="callout green"><b>Why it matters</b>Three layers now: undo points on the cluster, a nightly copy on the router, and an encrypted copy outside the house. Photos, videos and music have their own copy on the router's second drive (section 11).</div>
 </div>
 
 <!-- 9. MONITORING -->
@@ -404,9 +414,54 @@
   <p class="small">Not working yet: the Wyze Cam Pans (they don't answer the bridge built for them). The Blink doorbell's live view depends on its weak Wi-Fi connection.</p>
 </div>
 
-<!-- 11. STORIES -->
+<!-- 11. FILES -->
 <div class="section">
-  <h2>11. Four everyday stories, start to finish</h2>
+  <h2>11. Your files on the router</h2>
+  <p>The router has two 4 TB drives. The first holds the family's <b>photo</b>, <b>video</b>, <b>music</b> and <b>Public_WD</b> folders. The second holds backups: the cluster's nightly backups and, since November 13, a full copy of photo, video and music in a folder called <b>media-backup</b>. The hub's <b>Files</b> page shows the first drive's folders in any web browser, with the same sign-in as everything else.</p>
+  <figure>
+    <svg viewBox="0 0 720 150" width="100%" role="img" aria-label="Photo flow">
+      <defs><marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2433"/></marker></defs>
+      <g font-size="10" text-anchor="middle">
+        <rect x="6" y="40" width="130" height="64" rx="10" fill="#f8fafc" stroke="#1d2433"/><text x="71" y="64" font-weight="700" font-size="12">Phone</text><text x="71" y="82">DS File uploads</text><text x="71" y="95">at home</text>
+        <rect x="176" y="40" width="150" height="64" rx="10" fill="#fff7ed" stroke="#b45309"/><text x="251" y="64" font-weight="700" font-size="12">uploaded media</text><text x="251" y="82">on the first drive</text><text x="251" y="95">(lands here first)</text>
+        <rect x="366" y="40" width="150" height="64" rx="10" fill="#f0fdf4" stroke="#15803d"/><text x="441" y="64" font-weight="700" font-size="12">photo / video</text><text x="441" y="82">Year / Year-Month</text><text x="441" y="95">sorted at 3 AM</text>
+        <rect x="556" y="40" width="158" height="64" rx="10" fill="#eef2ff" stroke="#2563eb"/><text x="635" y="64" font-weight="700" font-size="12">media-backup</text><text x="635" y="82">second drive</text><text x="635" y="95">same folders, same files</text>
+        <line x1="136" y1="72" x2="174" y2="72" stroke="#1d2433" stroke-width="1.6" marker-end="url(#f1)"/>
+        <line x1="326" y1="72" x2="364" y2="72" stroke="#1d2433" stroke-width="1.6" marker-end="url(#f1)"/>
+        <line x1="516" y1="72" x2="554" y2="72" stroke="#1d2433" stroke-width="1.6" marker-end="url(#f1)"/>
+        <text x="251" y="128" fill="#5b6475">moved, then removed here</text><text x="635" y="128" fill="#5b6475">copied right after sorting</text>
+      </g>
+    </svg>
+    <figcaption>Figure 5. A new photo's path: phone, upload folder, sorted into its month folder, copied to the backup drive.</figcaption>
+  </figure>
+  <div class="tech">
+    <div class="card t-amber"><h4>The organizer <span>mail room</span></h4><p>Every night at 3 AM the hub moves new photos and videos from <b>uploaded media</b> into <b>photo/Year/Year-Month</b> or <b>video/Year/Year-Month</b>, using the date the picture was taken. It checks each copy arrived whole before removing the original. Admins can also run it by hand.</p></div>
+    <div class="card t-blue"><h4>Backup to media-backup <span>a twin on the second drive</span></h4><p>Right after sorting, and every night, new and changed files in photo, video and music are copied to the same folders on the second drive. Nothing is ever taken off the first drive. Files you delete on the first drive are listed on the Files page; they leave the backup only after you review and confirm them.</p></div>
+    <div class="card t-green"><h4>The hub's Trash <span>second chance</span></h4><p>Deleting in Files moves things to the Trash (Manage › Trash) for 30 days, so a mistake can be undone. After 30 days they're removed for good.</p></div>
+    <div class="card t-violet"><h4>Router recycle bins <span>the hidden pile</span></h4><p>The router used to keep its own recycle bin in each folder, which nothing showed. By November it held 153 GB, mostly copies the organizer had already moved. The bins are now switched off, and the Trash page shows what's left in them, with buttons to restore or empty.</p></div>
+  </div>
+  <div class="callout amber"><b>Good to know</b>The first full copy to media-backup takes several hours, because the router does all the reading and writing. After that, each night copies only what changed. In November a suspicious program was found and removed from the music folder while the drives were being compared; nothing similar was found anywhere else.</div>
+</div>
+
+<!-- 12. COMPUTERS -->
+<div class="section">
+  <h2>12. Your home PCs from anywhere</h2>
+  <p>Admins can use the home PCs from any web browser: see the screen, type and click, open a command window or move files. This uses <b>MeshCentral</b>, which runs on the cluster. It works with Windows 11 Home, which can't accept the usual Windows "Remote Desktop".</p>
+  <div class="tech">
+    <div class="card t-blue"><h4>MeshCentral <span>remote control</span></h4><p>A small program (the "agent") on each PC keeps a connection out to MeshCentral, so no doors are opened on the router. Signing in uses the hub's login and always asks for a fresh 6-digit code. Every session is recorded and kept for 30 days.</p></div>
+    <div class="card t-amber"><h4>Wake-on-LAN <span>remote power button</span></h4><p>A sleeping or switched-off PC can't be reached, so Manage › Computers has a <b>Wake</b> button. It asks a small helper on the home network to send the PC's network card a "wake up" signal. It works best over a wired connection, and must be enabled in the PC's BIOS and network settings.</p></div>
+  </div>
+  <ol class="steps">
+    <li>Open <b>Manage › Computers</b> and click <b>Wake</b> next to the PC.</li>
+    <li>Wait about a minute for it to start.</li>
+    <li>Click <b>Remote desktop</b>, enter your 6-digit code, and pick the PC.</li>
+  </ol>
+  <div class="callout amber"><b>Still to do</b>The web address for MeshCentral isn't connected to Cloudflare yet, no PCs have the agent installed, and no PCs are listed in Manage › Computers. Each PC also needs Wake-on-LAN switched on in its BIOS.</div>
+</div>
+
+<!-- 13. STORIES -->
+<div class="section">
+  <h2>13. Five everyday stories, start to finish</h2>
   <h3>A. Opening the CRM from a coffee shop</h3>
   <ol class="steps">
     <li>You type <b>hub.energiapower.llc</b>. Cloudflare answers with the padlock and passes the visit down the private tunnel.</li>
@@ -430,15 +485,23 @@
   </ol>
   <h3>D. 3:30 AM, every night</h3>
   <ol class="steps">
-    <li>Longhorn copies each important volume to the router's drives: the CRM, hub, Authentik and Investco databases, Godseye's accounts, the Petros export, Home Assistant, Grafana, and Frigate's settings. Camera recordings aren't included, because they expire after a few days anyway; important clips will be kept on the router (Phase 6).</li>
+    <li>Longhorn copies each important volume to the router's drives: the CRM, hub, Authentik and Investco databases, Godseye's accounts, the Petros export, Home Assistant, Frigate's settings, the clip index and MeshCentral. Grafana isn't included any more: everything in it can be rebuilt from the blueprints.</li>
     <li>Prometheus records whether each backup worked. If one fails, or a backup is overdue, Alertmanager emails the admin.</li>
+    <li>At 5:30 the router's backups and the cluster's memory are encrypted and copied to Cloudflare R2, then checked file by file.</li>
     <li>In the morning, the hub's Backups page shows the time of every last successful save.</li>
+  </ol>
+  <h3>E. A photo from your phone</h3>
+  <ol class="steps">
+    <li>You take a photo. When the phone is on the home Wi-Fi, the DS File app uploads it to <b>Public_WD/uploaded media</b> on the router.</li>
+    <li>At 3 AM the hub's organizer reads the date it was taken and moves it to, for example, <b>photo/2026/2026-11</b>, checking the copy before removing the upload.</li>
+    <li>As soon as the organizer finishes, the backup copies the new photo to <b>media-backup/photo/2026/2026-11</b> on the second drive.</li>
+    <li>If you later delete it from the photo folder, the Files page lists it as "removed from the main drive", and it leaves the backup only when you confirm.</li>
   </ol>
 </div>
 
 <!-- 12. SUMMARY TABLE -->
 <div class="section">
-  <h2>12. Why each piece matters (summary)</h2>
+  <h2>14. Why each piece matters (summary)</h2>
   <table>
     <tr><th style="width:20%">Technology</th><th style="width:26%">In one sentence</th><th style="width:26%">Works closely with</th><th>Without it…</th></tr>
     <tr><td><b>Kubernetes (k3s)</b></td><td>Runs and heals every app on three computers</td><td>Everything below</td><td>Apps started and fixed by hand; one dead computer means an outage</td></tr>
@@ -459,26 +522,36 @@
     <tr><td><b>Neolink / Blink bridge / go2rtc</b></td><td>Translate each brand's video into a standard format</td><td>Frigate</td><td>Those cameras couldn't join the shared view</td></tr>
     <tr><td><b>Mosquitto (MQTT)</b></td><td>Message board between camera tools and Home Assistant</td><td>Frigate, bridges, Home Assistant</td><td>No detection events, buttons or light control</td></tr>
     <tr><td><b>Synology router</b></td><td>Internet, separate networks, backup storage</td><td>Longhorn, everything</td><td>Smart devices mixed with family computers; no backup target</td></tr>
+    <tr><td><b>Files page (rclone)</b></td><td>The router's folders in the browser; sorting, Trash and the media backup</td><td>Router, organizer</td><td>Files only reachable from Windows at home; no second copy of photos</td></tr>
+    <tr><td><b>Cloudflare R2</b></td><td>Encrypted copy of all backups outside the house</td><td>Longhorn, router</td><td>A fire or theft could take the computers and every backup together</td></tr>
+    <tr><td><b>MeshCentral + Wake-on-LAN</b></td><td>Use and wake the home PCs from anywhere</td><td>Authentik, Cloudflare Tunnel</td><td>PCs only usable in person</td></tr>
   </table>
 </div>
 
 <!-- 13. NEXT -->
 <div class="section">
-  <h2>13. What's next</h2>
-  <p>The project is built in phases. Phases 0–3 are finished (foundation, sign-in, the portal, monitoring and backups). Phase 4 (cameras and devices) is mostly done.</p>
+  <h2>15. What's next, and what's being locked down</h2>
+  <p>The project is built in phases. Phases 0–3 and 6 are finished, Phase 5 is built and waiting for setup on the PCs, Phase 4 is mostly done, and Phase 7 (hardening) is under way.</p>
   <table>
     <tr><th style="width:24%">Phase</th><th>What it adds</th><th style="width:16%">Status</th></tr>
     <tr><td><b>4 · Devices &amp; cameras</b></td><td>Remaining: the Wyze cameras, more smart devices (plug, chiller, bulbs, thermostat, locks, garage door, solar), and copying important clips to the router.</td><td>Mostly done</td></tr>
-    <tr><td><b>5 · Computers</b></td><td>Reach the family's PCs from the hub in a web browser (remote desktop), behind the same sign-in and phone code.</td><td>Planned</td></tr>
-    <tr><td><b>6 · Router storage</b></td><td>Use the router's two 4&nbsp;TB drives from the hub: browse files, see space and drive health, and give apps a shared folder (also where important camera clips will go).</td><td>Planned (suggested next)</td></tr>
-    <tr><td><b>7 · Hardening</b></td><td>A security pass: an off-site copy of the backups, tighter rules between apps, password rotation, proper certificates inside the cluster, and relief for the busy control-plane computer.</td><td>Planned</td></tr>
+    <tr><td><b>5 · Computers</b></td><td>Reach the family's PCs from the hub in a web browser (remote desktop), behind the same sign-in and phone code (section 12).</td><td>Built; PC setup to do</td></tr>
+    <tr><td><b>6 · Router storage</b></td><td>Use the router's two 4&nbsp;TB drives from the hub: browse files, sort phone uploads, Trash, and a copy of photo, video and music on the second drive (section 11).</td><td>Done</td></tr>
+    <tr><td><b>7 · Hardening</b></td><td>A security pass: an off-site copy of the backups, tighter rules between apps, password rotation, proper certificates inside the cluster, and relief for the busy control-plane computer.</td><td>In progress</td></tr>
   </table>
+  <h3>Locking things down (Phase 7 so far)</h3>
+  <div class="tech">
+    <div class="card t-green"><h4>Safety rules for apps <span>building code</span></h4><p>Each group of apps now has a safety level that the cluster enforces. The strictest groups (the hub, Argo CD, Traefik) may not run as an all-powerful user or reach into the computer underneath; device and storage tools that genuinely need more are flagged for review.</p></div>
+    <div class="card t-teal"><h4>Off-site backup <span>done</span></h4><p>An encrypted copy of every backup outside the house, checked every night (section 8).</p></div>
+    <div class="card t-amber"><h4>Walls between apps <span>in progress</span></h4><p>Today any app can talk to any other. The cluster is recording which apps really talk to which, so that "nothing unless allowed" rules can be added one group at a time without breaking anything. Then a broken-into app couldn't reach the databases of others.</p></div>
+    <div class="card t-red"><h4>Still to come <span>the rest of the list</span></h4><p>Proper certificates inside the cluster, encrypting stored passwords, a schedule for changing them, checking that only signed app packages run, and a backup for the busy main computer.</p></div>
+  </div>
   <div class="callout"><b>Related projects</b>MLflow for tracking Petros's AI training experiments, and an energy-broker AI agent that turns requests for proposals into contracts. Both would run on this same platform and appear as tiles on the hub.</div>
 </div>
 
 <!-- 14. GLOSSARY -->
 <div class="section">
-  <h2>14. Glossary</h2>
+  <h2>16. Glossary</h2>
   <dl>
     <dt>App / service</dt><dd>A program people use through a web browser, such as the CRM.</dd>
     <dt>Backup</dt><dd>A copy of data kept somewhere else, to bring it back after a loss.</dd>

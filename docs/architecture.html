@@ -61,9 +61,9 @@
       <p>A reference for software, QA, DevOps and release engineers: how the platform is built, deployed, secured, observed and recovered, and where it goes next.</p>
     </div>
     <div class="meta">
-      <div><b>Document date</b>November 9, 2026</div>
+      <div><b>Document date</b>November 13, 2026 (updated from Nov 9)</div>
       <div><b>Repository</b><span class="mono">daav817/home-lab-hub</span></div>
-      <div><b>Hub version</b>0.1.0.18</div>
+      <div><b>Hub version</b>0.1.0.42 (Node 26)</div>
       <div><b>Cluster</b>k3s v1.34.6+k3s1, 3 nodes</div>
       <div><b>Audience</b>Engineers maintaining or extending the platform</div>
       <div><b>Classification</b>Internal: contains topology, no secrets</div>
@@ -306,6 +306,17 @@
     <li><b>Health page</b> reads node and pod metrics through the Kubernetes API using the pod's ServiceAccount token (<code>lib/kube.ts</code>), with per-node pod usage (<code>buildWorkloads</code>).</li>
     <li><b>Backups page</b> reads Longhorn <code>volumes</code>, <code>backups</code>, <code>backuptargets</code> and <code>snapshots</code>, and can <i>create</i> snapshots and backups. The RBAC is a namespaced Role in <code>longhorn-system</code> (<code>platform/longhorn-backup/manifests/hub-backup-access.yaml</code>) with verbs <code>get</code>, <code>list</code> and <code>create</code> only: no delete, no restore.</li>
   </ul>
+  <h3>Router files, Trash, recycle bins and the media backup (Phases 6–7)</h3>
+  <p>The hub pod has a second container, <code>files</code> (rclone 1.69.1), that logs in to the router's SMB server (SMB 2.0.2, 192.168.1.1) as the hub's own SRM account. It serves every share that account can open as one WebDAV tree on <code>127.0.0.1:8091</code> (downloads, uploads, renames via MOVE) plus rclone's remote-control API on <code>127.0.0.1:5572</code> (listings, sizes, deletes, background jobs). Nothing outside the pod can reach either port. Shares in <code>FILES_HIDDEN</code> (<code>k8s-storage-folder</code>, <code>camera-clips</code>, <code>media-backup</code>) never appear in the UI.</p>
+  <table>
+    <tr><th style="width:20%">Module</th><th>Behaviour</th></tr>
+    <tr><td><code>lib/files.ts</code></td><td>Path validation (<code>parsePath</code>/<code>cleanName</code>; every path from a URL or form goes through it), share list cached in memory and refreshed every 60 s (the router takes ~11 s to refuse a share), drives grouped by identical size/free figures, Prometheus metrics at <code>/api/metrics</code> (bearer token), alert at 85% full.</td></tr>
+    <tr><td><code>lib/organizer.ts</code></td><td>Moves JPG/PNG/HEIC/MP4/AVI/MOV files from <code>Public_WD/uploaded media</code> (the phone's DS File upload folder) into <code>photo|video/&lt;year&gt;/&lt;year-month&gt;</code>. Nightly at a configurable hour (currently 3 AM New York) plus manual runs. A move between shares is copy, size check, delete (<code>operations/movefile</code>); same-share moves are renames. Runs are recorded in <code>organize_runs</code>.</td></tr>
+    <tr><td><code>lib/trash.ts</code></td><td>Deletes in Files move the item to <code>&lt;share&gt;/.hub-trash/&lt;id&gt;/</code> (instant rename) with a <code>file_trash</code> row; restore or delete forever from Manage › Trash; an hourly sweep empties items older than 30 days.</td></tr>
+    <tr><td><code>lib/recycle.ts</code></td><td>SRM's own per-share recycle bins (<code>&lt;share&gt;/#recycle</code>), which SRM never shows. Sizes measured every 6 h in the background (<code>settings.recycle-bins</code>); Manage › Trash lists them and can browse, restore, delete or empty them. The bins were switched off in SRM on Nov 13 after 153 GB had built up, mostly from the organizer's cross-share deletes.</td></tr>
+    <tr><td><code>lib/mirror.ts</code></td><td>Backup of <code>photo</code>, <code>video</code> and <code>music</code> (drive 1) to <code>media-backup/&lt;same name&gt;</code> (an SRM shared folder on drive 2). rclone <code>sync/copy</code> as an async job (2 transfers, 4 checkers; excludes <code>#recycle</code>, <code>@*</code>, <code>.hub-trash</code>, desktop.ini, Thumbs.db), which never deletes. After each copy both trees are listed, and files only on the backup go to <code>mirror_pending</code>; an admin reviews them in a dialog on the Files page before they are deleted from the backup (the main drive is re-checked first). Triggers: after an organizer run that moved files (queued if a run is in progress), nightly at the organizer's hour, and Run now. Runs are in <code>mirror_runs</code>; a run cut short by a restart is marked <i>interrupted</i> and the next run resumes incrementally.</td></tr>
+    <tr><td><code>lib/computers.ts</code></td><td>Manage › Computers: PCs (name, MAC) in <code>computers</code>. Wake posts to the Wake-on-LAN relay (<code>wol-relay</code>, hostNetwork on worker-01, token-protected), because only the host network reaches the LAN broadcast domain. Remote desktop links to MeshCentral.</td></tr>
+  </table>
   <h3>Extending the hub: checklist</h3>
   <ol>
     <li>Pure logic goes in <code>src/lib/*.ts</code> with a matching <code>*.test.ts</code>. UI in <code>src/app</code>. Server components by default.</li>
@@ -402,9 +413,9 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
       <g font-size="9">
         <rect x="6" y="10" width="190" height="190" rx="8" fill="#f0fdf4" stroke="#15803d"/><text x="101" y="28" text-anchor="middle" font-weight="700">Longhorn volumes</text>
         <text x="16" y="46" font-weight="700" fill="#15803d">group critical-data (nightly)</text>
-        <text x="16" y="60">energia-postgres · hub-postgres</text><text x="16" y="73">authentik-postgresql · investco-pg</text><text x="16" y="86">godseye-auth · petros-backups</text><text x="16" y="99">home-assistant-config · frigate-config</text><text x="16" y="112">grafana</text>
+        <text x="16" y="60">energia-postgres · hub-postgres</text><text x="16" y="73">authentik-postgresql · investco-pg</text><text x="16" y="86">godseye-auth · petros-backups</text><text x="16" y="99">home-assistant-config · frigate-config</text><text x="16" y="112">clip-keeper · meshcentral-data</text>
         <text x="16" y="132" font-weight="700" fill="#5b6475">not backed up (by design)</text>
-        <text x="16" y="146">frigate-media · prometheus · loki</text><text x="16" y="159">alertmanager · godseye-cache</text><text x="16" y="172">mosquitto · blink-bridge · wyze</text><text x="16" y="185">petros-models-pvc (legacy)</text>
+        <text x="16" y="146">frigate-media · prometheus · loki · grafana</text><text x="16" y="159">alertmanager · godseye-cache</text><text x="16" y="172">mosquitto · blink-bridge · wyze</text><text x="16" y="185">petros-models-pvc (legacy)</text>
         <rect x="230" y="10" width="170" height="52" rx="6" fill="#eef2ff" stroke="#2563eb"/><text x="315" y="28" text-anchor="middle" font-weight="700">daily-snapshot 02:00</text><text x="315" y="42" text-anchor="middle">group default · retain 7</text><text x="315" y="55" text-anchor="middle">weekly-snapshot Sun 03:00 · 4</text>
         <rect x="230" y="76" width="170" height="52" rx="6" fill="#fff7ed" stroke="#b45309"/><text x="315" y="94" text-anchor="middle" font-weight="700">nightly-backup 03:30</text><text x="315" y="108" text-anchor="middle">group critical-data · retain 14</text><text x="315" y="121" text-anchor="middle">incl. detached volumes</text>
         <rect x="230" y="142" width="170" height="58" rx="6" fill="#ecfeff" stroke="#0f8b8d"/><text x="315" y="160" text-anchor="middle" font-weight="700">CronJob petros-export 07:30Z</text><text x="315" y="174" text-anchor="middle">pg_dump Supabase public schema</text><text x="315" y="187" text-anchor="middle">+ rclone GCS bucket → PVC</text>
@@ -423,13 +434,35 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td><b>RTO (time to restore)</b></td><td>About 5–15 minutes per database volume (restore into a new PVC from the backup URL, then repoint). Not yet rehearsed as a whole-cluster rebuild.</td></tr>
     <tr><td><b>Restore tests</b></td><td><code>scripts/restore-test.ps1</code> (hub: row counts and MD5 per table match). <code>scripts/restore-test-energia.ps1</code> (45 of 45 tables, Nov 9). <code>scripts/petros-restore-test.yaml</code> (11 tables; models match active records).</td></tr>
     <tr><td><b>Crash consistency</b></td><td>Longhorn backups are block-level and crash-consistent. Postgres replays WAL on start, which the restore tests exercise. Logical dumps (<code>pg_dump</code>) are only used for Petros.</td></tr>
-    <tr><td><b>Off-site copy</b></td><td><b>None</b>: the backup target sits in the same building as the cluster. This is the top Phase 7 item.</td></tr>
+    <tr><td><b>Off-site copy</b></td><td><b>Cloudflare R2</b> since Nov 13 (below). RPO ≤ 24 h off-site. First upload: 1.14 GB in 3,125 files plus 141 MB of etcd snapshots, verified with 0 differences.</td></tr>
   </table>
+  <h3>Off-site copy (Cloudflare R2)</h3>
+  <p>CronJob <code>longhorn-system/offsite-backup</code> runs at 05:30 New York, after the 03:30 backups (<code>platform/longhorn-backup/manifests/offsite-backup.yaml</code>; rclone 1.69.1 on openclaw, as root only to read the 0600 etcd snapshot files through a read-only hostPath). Credentials and the encryption password and salt are in the SealedSecret <code>offsite-backup</code> (<code>scripts/seal-offsite-backup.ps1</code>). The password and salt are also in the owner's password manager, because after a total loss the cluster holding the sealed copy is gone too.</p>
+  <ul>
+    <li><b>What:</b> the router's <code>k8s-storage-folder</code> (the Longhorn backup store, all volumes) and the k3s etcd snapshots (every object and Secret, including the Sealed Secrets key).</li>
+    <li><b>Encryption:</b> rclone <code>crypt</code> (file contents and names) before upload, to <code>r2:home-lab-backups/home-lab</code>. The R2 token is limited to that one bucket, Object Read &amp; Write.</li>
+    <li><b>Retention:</b> files that change or disappear on the router go to <code>longhorn-replaced/&lt;date&gt;/</code> for 14 days (the ransomware and accidental-delete window); etcd snapshots are kept 30 days. <code>--fast-list</code> keeps Class A operations low.</li>
+    <li><b>Size and cost:</b> ~1.4 GB at first, projected 2.5–4 GB at steady state, inside R2's free 10 GB (then $0.015/GB-month, no egress fees).</li>
+    <li><b>Checks:</b> step 4 of every run compares every router file with the off-site copy by size. Alerts fire if the job fails or is overdue, only while the CronJob isn't suspended.</li>
+    <li><b>etcd snapshots</b> are compressed by k3s since Nov 12 (<code>etcd-snapshot-compress: true</code> in <code>/etc/rancher/k3s/config.yaml</code> on openclaw, not in git): 44.5 MB → ~7.4 MB each. <code>k3s server --cluster-reset --cluster-reset-restore-path=&lt;file&gt;.zip</code> reads them directly.</li>
+    <li><b>Turning it off:</b> set <code>suspend: true</code>, empty the bucket (lifecycle rule or <code>rclone purge</code>), delete the bucket and token, and optionally cancel the R2 subscription.</li>
+  </ul>
+  <p><b>Grafana</b> left the nightly backup on Nov 12. All 25 dashboards and the Prometheus and Alertmanager data sources come from the Helm chart, the Loki data source is provisioned from <code>platform/monitoring-access/manifests/grafana-loki-datasource.yaml</code> (same uid), and the rest of the volume is plugins Grafana downloads again. Note that Longhorn's <code>dataStored</code> figures are uncompressed: measure the backup store itself for real sizes.</p>
   <h3>Restore procedure (reference)</h3>
 <pre>1. Longhorn UI (step-up 2FA) or kubectl: find the backup URL for the volume (backups.longhorn.io, label backup-volume=&lt;pv&gt;).
 2. Create a StorageClass with parameters.fromBackup=&lt;url&gt; (see restore-test scripts), then a PVC from it.
 3. Scale the app's StatefulSet to 0, swap the claim (or copy data), scale back to 1.
-4. Verify with the matching restore-test fingerprint, then remove the temporary StorageClass.</pre>
+4. Verify with the matching restore-test fingerprint, then remove the temporary StorageClass.
+
+After a total loss (from the off-site copy), on any machine with rclone:
+1. Remotes: r2 = S3, provider Cloudflare, endpoint https://&lt;account-id&gt;.r2.cloudflarestorage.com, with a
+   new R2 token for the bucket; offsite = crypt over r2:home-lab-backups/home-lab with the saved password
+   and salt (rclone obscure both), standard filename encryption, directory names encrypted.
+2. rclone copy offsite:etcd &lt;dir&gt;, then on a fresh k3s server:
+   k3s server --cluster-reset --cluster-reset-restore-path=&lt;dir&gt;/&lt;newest&gt;.zip
+   (brings back every object, every Secret and the Sealed Secrets key).
+3. rclone copy offsite:longhorn &lt;share&gt;, point a Longhorn backup target at that share and restore
+   the volumes as above.</pre>
 </div>
 
 <!-- 10 OBS -->
@@ -523,11 +556,12 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td><b>Edge</b></td><td>Cloudflare proxy and WAF, Always-HTTPS, outbound-only tunnel, no port forwards, UPnP off</td><td>Routes managed in a UI (no review trail); in-cluster hops are not end-to-end TLS</td></tr>
     <tr><td><b>Identity</b></td><td>Authentik with mandatory TOTP for admins; invite-only enrollment; step-up 2FA for Longhorn; HA with its own TOTP</td><td>Recovery-code storage is manual; no WebAuthn yet; family accounts not yet enrolled</td></tr>
     <tr><td><b>Authorization</b></td><td>Server-side tile filtering; ForwardAuth group policies; hub RBAC limited to read and create on Longhorn</td><td>Per-app auth quality varies (Petros auth hardened Nov 6)</td></tr>
-    <tr><td><b>Network</b></td><td>Three isolated LANs; worker-02 nftables guard; NetworkPolicies on databases (hub, authentik, investco), cameras and Mosquitto</td><td>No default-deny per namespace; several app namespaces have no policy</td></tr>
-    <tr><td><b>Workload</b></td><td>Hub: non-root, read-only root filesystem, dropped capabilities, seccomp RuntimeDefault, no SA token automount where unused</td><td>Older apps and some vendor images run as root; no Pod Security Admission labels</td></tr>
+    <tr><td><b>Network</b></td><td>Three isolated LANs; worker-02 nftables guard; NetworkPolicies on databases (hub, authentik, investco), cameras and Mosquitto</td><td>No default-deny per namespace yet. In progress since Nov 12: Calico flow logs (Goldmane + Whisker) are on, and <code>monitoring/flow-recorder</code> logs every new kind of connection to Loki (30 days), so per-namespace allow lists can be written from real traffic: staged first (Calico staged policies report "would deny" without blocking), then enforced one namespace at a time. hostNetwork pods (Home Assistant, the WoL relay, node-exporter, MetalLB speakers) are outside pod policy.</td></tr>
+    <tr><td><b>Workload</b></td><td>Hub: non-root, read-only root filesystem, dropped capabilities, seccomp RuntimeDefault, no SA token automount where unused</td><td>Pod Security Admission labels on every namespace since Nov 11 (<code>scripts/apply-pod-security.mjs</code>): <i>restricted</i> for argocd, hub and traefik; <i>baseline</i> for authentik, default, energia-web, godseye, investco and pdf-edit; <i>privileged</i> with baseline warn/audit for kube-system, cameras, home-assistant, longhorn-system, monitoring and remote-access. Some vendor images still run as root.</td></tr>
     <tr><td><b>Secrets</b></td><td>SealedSecrets in git; sealing key offline; values entered through hidden prompts</td><td>No rotation schedule; secrets rotated once after a log exposure (Wyze)</td></tr>
     <tr><td><b>Supply chain</b></td><td>SHA-pinned Actions; Trivy, Gitleaks, Semgrep; hash-pinned pip; SHA-256-checked HA add-ons; Renovate</td><td>Renovate and scanners on the hub repo only; no image signing (cosign) or SBOMs</td></tr>
-    <tr><td><b>Data</b></td><td>Replicated volumes; nightly backups; tested restores; backup-failure alerts</td><td>No off-site copy; backups not encrypted at rest on the router</td></tr>
+    <tr><td><b>Data</b></td><td>Replicated volumes; nightly backups; tested restores; backup-failure alerts</td><td>Encrypted off-site copy in R2 since Nov 13; the copy on the router itself isn't encrypted at rest. Media (photo, video, music) is mirrored to the second router drive, not off-site.</td></tr>
+    <tr><td><b>Incident, Nov 13</b></td><td>A 56 KB Windows executable with a random name (<code>music/PRWhZpau.exe</code>, dated Apr 2 2024, SHA-256 <code>3c2fe308…7f71</code>) was found while comparing the drives. VirusTotal flagged it, and it was deleted permanently. No other executables were found on photo, video, music, Public_WD or media-backup.</td><td>Origin unknown, most likely a Windows PC with write access to the share. Full Defender scans on the home PCs and a <code>dagfiles</code> password change are recommended.</td></tr>
   </table>
   <div class="note warn"><b>Change-control guardrail</b>Automation agents operating on this cluster are subject to a policy classifier. Actions that install external code, or use production credentials from inside pods, need explicit owner approval. Don't build workarounds: ask the owner.</div>
 </div>
@@ -546,6 +580,9 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td><b>Change Home Assistant packages</b></td><td>Edit the ConfigMap in <code>platform/home-assistant/manifests/home-assistant.yaml</code>. After Argo syncs, restart the HA deployment (the init container copies files on start). Validate with <code>python -m homeassistant --script check_config -c /config</code>.</td></tr>
     <tr><td><b>Update the Cameras dashboard</b></td><td>Edit <code>scripts/make-cameras-dashboard.py</code>, regenerate, check that the entities exist, paste into the raw configuration editor.</td></tr>
     <tr><td><b>Re-sign Blink</b></td><td><code>kubectl exec -it -n cameras deploy/blink-bridge -c bridge -- python /app/bridge.py setup</code> (email code; stores the token only).</td></tr>
+    <tr><td><b>Off-site backup</b></td><td>Run now: <code>kubectl create job -n longhorn-system --from=cronjob/offsite-backup offsite-manual</code>, then read its log (step 4 must report 0 differences). Pause: <code>suspend: true</code> in git.</td></tr>
+    <tr><td><b>Media backup (photo/video/music)</b></td><td>Files page › Backup to media-backup: on/off, Run now, Stop, review deletions. A first full run takes hours (router SMB ~7 MB/s); later runs copy only differences. A hub deploy interrupts a running copy, and the next run resumes it.</td></tr>
+    <tr><td><b>See traffic between apps</b></td><td><code>kubectl port-forward -n calico-system svc/whisker 8081:8081</code>, then http://localhost:8081. Beyond the last hour: Loki, <code>{namespace="monitoring", app="flow-recorder"} |= "FLOW "</code>.</td></tr>
     <tr><td><b>Node maintenance</b></td><td>Cordon and drain workers one at a time. Longhorn rebuilds replicas when the node returns. Draining worker-02 stops Home Assistant and Frigate (pinned).</td></tr>
   </table>
   <h3>Known gotchas</h3>
@@ -561,14 +598,15 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
   <h2>14. Known gaps and technical debt</h2>
   <table>
     <tr><th style="width:8%">Sev.</th><th style="width:32%">Gap</th><th>Impact and proposed fix</th></tr>
-    <tr><td><span class="tag sev-h">High</span></td><td>No off-site backup copy</td><td>A site-level event (fire, theft) loses the cluster and the backups together. Fix: a second Longhorn backup target (S3-compatible, e.g. Backblaze B2 or Cloudflare R2) for <code>critical-data</code>, encrypted, weekly retention (Phase 7).</td></tr>
     <tr><td><span class="tag sev-h">High</span></td><td>Single control-plane node with 8 GB on openclaw</td><td>Losing openclaw stops scheduling and the API; memory pressure is chronic. Fix: move to a 3-server embedded-etcd k3s cluster (the workers become servers too), or upgrade openclaw's RAM and reserve system resources.</td></tr>
     <tr><td><span class="tag sev-m">Med</span></td><td>Configuration outside git (§8)</td><td>Drift and no review trail. Fix: Terraform for Cloudflare; Argo for the Helm releases (monitoring, Longhorn, Traefik); app-of-apps for the Application objects; Grafana provisioning.</td></tr>
     <tr><td><span class="tag sev-m">Med</span></td><td>Inconsistent release strategies; Image Updater write-back <code>argocd</code></td><td>Git doesn't describe what's running for Energia and Godseye. Fix: one reusable release workflow (§16).</td></tr>
     <tr><td><span class="tag sev-m">Med</span></td><td>Petros CI and the QA Lab use the production database</td><td>Tests can mutate production data (the E2E run writes a simulation). Fix: an ephemeral Postgres in CI and a staging Supabase project for the Lab.</td></tr>
-    <tr><td><span class="tag sev-m">Med</span></td><td>No namespace default-deny NetworkPolicies</td><td>Lateral movement is possible from a compromised app. Fix: default-deny ingress per app namespace, with explicit allows from Traefik and cloudflared.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>No namespace default-deny NetworkPolicies (in progress)</td><td>Lateral movement is possible from a compromised app. Traffic is being recorded (§12); staged, then enforced, allow lists per namespace follow.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>Apps reachable on the LAN without sign-in</td><td>Petros (.240), Energia (.241), the Energia website (.242) and Godseye (.244) have MetalLB addresses that skip Traefik and Authentik for anyone on the home Wi-Fi. Fix: limit them with the network-isolation rules, or drop the LoadBalancer services.</td></tr>
+    <tr><td><span class="tag sev-m">Med</span></td><td>MeshCentral has no public hostname yet</td><td><code>mesh.energiapower.llc</code> isn't routed in the Cloudflare tunnel, so Remote desktop doesn't open. No agents are installed and no PCs are listed in Manage › Computers.</td></tr>
+    <tr><td><span class="tag sev-l">Low</span></td><td>TypeScript 7 held back</td><td><code>typescript-eslint</code> refuses TS 7.0, so lint fails on Renovate's TS 7 PR (everything else passes). Revisit when typescript-eslint supports TS 7.</td></tr>
     <tr><td><span class="tag sev-m">Med</span></td><td>Frigate config and HA dashboards are not fully declarative</td><td>Manual steps risk drift. Fix: Frigate config rendered on every start (with a migration check); HA dashboards in YAML mode from a ConfigMap.</td></tr>
-    <tr><td><span class="tag sev-l">Low</span></td><td>Loki has no retention; Grafana data source is manual</td><td>Unbounded growth (slow). Fix: <code>retention_period: 30d</code> and a provisioned data source.</td></tr>
     <tr><td><span class="tag sev-l">Low</span></td><td>Single replicas, no PDBs</td><td>Brief outages during drains. Acceptable at this scale; add PDBs for Authentik and the hub if they gain replicas.</td></tr>
     <tr><td><span class="tag sev-l">Low</span></td><td>blinkpy monkeypatch; Blink cloud dependency</td><td>Upgrades can regress. Fix: upstream the <code>readexactly</code> fix; add a bridge smoke test.</td></tr>
     <tr><td><span class="tag sev-l">Low</span></td><td>Hub tile categories inconsistent (Prometheus and Alertmanager under "Family")</td><td>Cosmetic: audience still restricts access. Fix in Manage.</td></tr>
@@ -605,7 +643,8 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td>Family rollout</td><td>Authentik invitations for <code>hub-family</code>; Frigate viewer role mapped from groups.</td><td>A family member can view cameras with 2FA and no admin rights</td></tr>
   </table>
 
-  <h3>Phase 6 · Router storage <span class="tag st-plan">Planned, next</span></h3>
+  <h3>Phase 6 · Router storage <span class="tag st-done">Done</span></h3>
+  <p class="small">Built differently from the plan below: an rclone sidecar in the hub pod instead of an SMB CSI driver and a separate File Browser (§6). Later additions: Trash, router recycle bins, the uploads organizer and the media backup to the second drive.</p>
   <table>
     <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
     <tr><td>SMB CSI driver</td><td>Install <code>csi-driver-smb</code> (Argo-managed). StorageClass <code>router-smb</code> pointing at dedicated shares (<code>/clips</code>, <code>/shared</code>), credentials as a SealedSecret, a dedicated SRM user with share-only rights. Keep <code>k8s-storage-folder</code> exclusively for Longhorn backups.</td><td>A PVC on <code>router-smb</code> mounts read-write in a test pod; the backup share stays unreadable to apps</td></tr>
@@ -615,7 +654,8 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
   </table>
   <div class="note warn"><b>Risk</b>The router's CPU and USB-attached drives make a weak primary storage tier. Use SMB for <i>archival</i> and <i>sharing</i>, never for database volumes, which stay on Longhorn.</div>
 
-  <h3>Phase 5 · Computers <span class="tag st-plan">Planned</span></h3>
+  <h3>Phase 5 · Computers <span class="tag st-part">Built; setup pending</span></h3>
+  <p class="small">Built with MeshCentral 1.3.1 (own image, Authentik OIDC with fresh 2FA, sessions recorded 30 days) and a Wake-on-LAN relay, instead of Guacamole. Pending: the Cloudflare hostname, agents on the PCs, BIOS/NIC Wake-on-LAN, and the PCs added in Manage › Computers.</p>
   <table>
     <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
     <tr><td>Remote access gateway</td><td><b>Apache Guacamole</b> (guacd + web + Postgres) with Authentik OIDC, for clientless RDP, VNC and SSH in the browser. Important: <b>Windows 11 Home cannot host RDP</b>, so Home-edition PCs need a VNC server or the alternative below. <b>MeshCentral</b> (agent-based) works for Home editions and off-LAN machines and adds remote management (power, terminal, files).</td><td>Admin opens a PC desktop from the hub with 2FA; sessions are logged</td></tr>
@@ -624,10 +664,11 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td>Audit</td><td>Guacamole session recording to the Phase 6 share; Authentik events to Loki.</td><td>Every session is attributable and replayable</td></tr>
   </table>
 
-  <h3>Phase 7 · Hardening <span class="tag st-plan">Planned</span></h3>
+  <h3>Phase 7 · Hardening <span class="tag st-part">In progress</span></h3>
+  <p class="small">Done: Pod Security labels (Nov 11), encrypted off-site copy to Cloudflare R2 including etcd snapshots (Nov 13), compressed etcd snapshots. In progress: network segmentation (traffic recording). Open: cert-manager and TLS, Secrets encrypted at rest and a rotation calendar, image signing, control-plane resilience.</p>
   <table>
     <tr><th style="width:24%">Work item</th><th>Design</th><th style="width:24%">Acceptance criteria</th></tr>
-    <tr><td>Off-site backups</td><td>A second Longhorn backup target (S3-compatible: B2 or R2) with client-side encryption, a separate recurring job (weekly, retain 8) for <code>critical-data</code>, and an alert on overdue off-site copies.</td><td>A restore test from the off-site target passes</td></tr>
+    <tr><td>Off-site backups</td><td><b>Done differently:</b> a nightly rclone crypt copy of the whole backup store plus the etcd snapshots to R2 (§9), rather than a second Longhorn target.</td><td>A restore test from the off-site target passes</td></tr>
     <tr><td>Control-plane resilience</td><td>Convert to 3 k3s servers with embedded etcd (snapshots to the router and off-site), or at minimum upgrade openclaw's RAM and set <code>--system-reserved</code> / <code>--kube-reserved</code>.</td><td>Losing any one node keeps the API available (if HA)</td></tr>
     <tr><td>Network segmentation</td><td>Default-deny ingress in every app namespace; explicit allows from <code>traefik</code> and <code>cloudflared</code>; egress policies for namespaces holding secrets.</td><td>Policy tests (e.g. a netshoot pod) show denied lateral traffic</td></tr>
     <tr><td>Workload hardening</td><td>Pod Security Admission <code>restricted</code> (where vendor images allow) or <code>baseline</code>; non-root and read-only filesystems for all first-party apps.</td><td>No privileged pods outside system namespaces, except documented ones (HA hostNetwork, GPU plugin)</td></tr>
@@ -676,7 +717,7 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
 
 <!-- APPENDIX A -->
 <div class="section">
-  <h2>Appendix A · Version inventory <small>(read from the cluster, Nov 9 2026)</small></h2>
+  <h2>Appendix A · Version inventory <small>(read from the cluster, Nov 9 2026; hub rows updated Nov 13)</small></h2>
   <table>
     <tr><th>Component</th><th>Version</th><th>Component</th><th>Version</th></tr>
     <tr><td>k3s / Kubernetes</td><td>v1.34.6+k3s1</td><td>Argo CD</td><td>v3.3.8</td></tr>
@@ -686,8 +727,8 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td>Longhorn</td><td>v1.11.1</td><td>cloudflared</td><td>2026.10.3</td></tr>
     <tr><td>kube-prometheus-stack</td><td>88.6.3</td><td>Prometheus</td><td>v3.14.0</td></tr>
     <tr><td>Alertmanager</td><td>v0.34.0</td><td>Loki (chart)</td><td>3.6 (7.3.0)</td></tr>
-    <tr><td>Promtail (chart)</td><td>3.5.1 (6.17.1)</td><td>Hub: Next.js / React</td><td>16.4.5 / 19.3.0</td></tr>
-    <tr><td>Hub: next-auth</td><td>4.24.x</td><td>Hub image</td><td>0.1.0.18 (node:22-alpine)</td></tr>
+    <tr><td>Promtail (chart)</td><td>3.5.1 (6.17.1)</td><td>Hub: Next.js / React / ESLint</td><td>16.4.5 / 19.3.1 / 10</td></tr>
+    <tr><td>Hub: next-auth</td><td>4.24.x</td><td>Hub image</td><td>0.1.0.42 (node:26-alpine, Node 26.13.1)</td></tr>
     <tr><td>Hub / Authentik Postgres</td><td>17.11</td><td>Energia Postgres</td><td>16 (alpine)</td></tr>
     <tr><td>Investco Postgres</td><td>17 (alpine)</td><td>Petros AI</td><td>2.4.4</td></tr>
     <tr><td>Home Assistant</td><td>2026.10.4</td><td>Frigate</td><td>0.18.2</td></tr>
@@ -695,6 +736,8 @@ kubectl create secret generic NAME -n NS --from-literal=KEY="$value" --dry-run=c
     <tr><td>Mosquitto</td><td>2.0.22</td><td>Neolink</td><td>v0.6.2 (digest-pinned)</td></tr>
     <tr><td>go2rtc (bridge / Frigate)</td><td>1.9.14 / 1.9.14</td><td>blinkpy</td><td>0.25.9 (patched recv)</td></tr>
     <tr><td>wyze-bridge</td><td>2.10.3 (scaled to 0)</td><td>Trivy (CI)</td><td>0.76.1</td></tr>
+    <tr><td>MeshCentral</td><td>1.3.1 (own image)</td><td>rclone (hub files, backups)</td><td>1.69.1</td></tr>
+    <tr><td>Calico Goldmane / Whisker</td><td>v3.31.2 (enabled Nov 12)</td><td>Off-site storage</td><td>Cloudflare R2, bucket home-lab-backups</td></tr>
   </table>
 </div>
 
