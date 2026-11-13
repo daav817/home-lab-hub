@@ -147,7 +147,21 @@ spec:
           podSelector: {matchLabels: {k8s-app: kube-dns}}
       ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
-# hub-postgres keeps its own rule (only the hub may connect) and needs nothing outbound.
+# hub-postgres has its own rule (only the hub may connect) but it names the port ("postgres"),
+# which Calico's staged preview reported as a would-deny. This states the same thing by number.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-hub-postgres
+  namespace: hub
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: hub-postgres}}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hub}}
+      ports: [{port: 5432, protocol: TCP}]
+---
 apiVersion: projectcalico.org/v3
 kind: StagedKubernetesNetworkPolicy
 metadata:
