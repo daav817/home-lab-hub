@@ -8,7 +8,11 @@
 # These start as Calico *staged* policies (StagedKubernetesNetworkPolicy): they block nothing,
 # and Whisker / the flow recorder show each connection they would have denied as a "pending"
 # Deny. To enforce a namespace, change its policies' apiVersion/kind to
-# networking.k8s.io/v1 NetworkPolicy (the spec stays exactly the same).
+# networking.k8s.io/v1 NetworkPolicy (the spec stays exactly the same), then delete the leftover
+# staged copies (the Argo app doesn't prune):
+#   kubectl -n <ns> delete stagedkubernetesnetworkpolicies.projectcalico.org --all
+#
+# Enforced: pdf-edit, energia-web, godseye (2026-11-13). Everything else is still staged.
 #
 # Notes that apply to all files:
 # - Kubernetes NetworkPolicies add up: a pod is allowed whatever any policy selecting it allows.
@@ -21,8 +25,8 @@
 #   forward-auth routes) and the hub (status lights).
 
 # ---------------------------------------------------------------- pdf-edit
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: default-deny
   namespace: pdf-edit
@@ -30,8 +34,8 @@ spec:
   podSelector: {}
   policyTypes: ["Ingress", "Egress"]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-dns
   namespace: pdf-edit
@@ -44,8 +48,8 @@ spec:
           podSelector: {matchLabels: {k8s-app: kube-dns}}
       ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-pdf-edit
   namespace: pdf-edit
@@ -71,8 +75,8 @@ spec:
             except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
 ---
 # ---------------------------------------------------------------- energia-web
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: default-deny
   namespace: energia-web
@@ -80,8 +84,8 @@ spec:
   podSelector: {}
   policyTypes: ["Ingress", "Egress"]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-dns
   namespace: energia-web
@@ -94,8 +98,8 @@ spec:
           podSelector: {matchLabels: {k8s-app: kube-dns}}
       ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-energia-website
   namespace: energia-web
@@ -117,8 +121,8 @@ spec:
             except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
 ---
 # ---------------------------------------------------------------- godseye
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: default-deny
   namespace: godseye
@@ -126,8 +130,8 @@ spec:
   podSelector: {}
   policyTypes: ["Ingress", "Egress"]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-dns
   namespace: godseye
@@ -140,8 +144,8 @@ spec:
           podSelector: {matchLabels: {k8s-app: kube-dns}}
       ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
-apiVersion: projectcalico.org/v3
-kind: StagedKubernetesNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-godseye
   namespace: godseye

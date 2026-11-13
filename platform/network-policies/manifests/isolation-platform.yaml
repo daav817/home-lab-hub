@@ -132,7 +132,8 @@ spec:
       ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
 # Traefik routes to whatever the Ingresses name, so it may reach any pod; each app's own rule
-# decides the port. It needs no internet (Cloudflare holds the certificates).
+# decides the port. It needs no internet (Cloudflare holds the certificates); its only outbound
+# call is the built-in new-version check, which is fine to block.
 apiVersion: projectcalico.org/v3
 kind: StagedKubernetesNetworkPolicy
 metadata:
