@@ -12,7 +12,7 @@
 # staged copies (the Argo app doesn't prune):
 #   kubectl -n <ns> delete stagedkubernetesnetworkpolicies.projectcalico.org --all
 #
-# Enforced: pdf-edit, energia-web, godseye (2026-11-13). Everything else is still staged.
+# Enforced: pdf-edit, energia-web, godseye (2026-11-13). Everything else is still staged (ebroker added staged 2026-11-17).
 #
 # Notes that apply to all files:
 # - Kubernetes NetworkPolicies add up: a pod is allowed whatever any policy selecting it allows.
@@ -223,6 +223,81 @@ spec:
       ports: [{port: 3000, protocol: TCP}]
   egress:
     # Schwab and market-data APIs.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+---
+# ---------------------------------------------------------------- ebroker (staged, 2026-11-17)
+# App (Next.js, port 3000), worker, Postgres, SeaweedFS, migration and backup jobs. Its own pods talk
+# to each other; the app is reached through cloudflared, Traefik and the hub; app and worker call the
+# internet (Google mail and pickers, Anthropic, Resend, SignWell). When pdf-edit becomes ebroker's PDF
+# manager, pdf-edit's enforced allow-pdf-edit must also admit the ebroker namespace on port 8000.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: ebroker
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: ebroker
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-within-ebroker
+  namespace: ebroker
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-ebroker-app
+  namespace: ebroker
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: ebroker-app}}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+          podSelector: {matchLabels: {app: cloudflared}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+      ports: [{port: 3000, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-ebroker-internet
+  namespace: ebroker
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: [ebroker-app, ebroker-worker]}
+  policyTypes: ["Egress"]
+  egress:
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
