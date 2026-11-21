@@ -1,0 +1,65 @@
+# Applied once by hand: kubectl apply -f platform/headlamp/argocd-application.yaml
+# A k9s-style view of the cluster in the browser, at https://headlamp.energiapower.llc.
+# The chart comes from Headlamp. The namespace, permissions and login live in
+# platform/headlamp/manifests.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/headlamp/
+      chart: headlamp
+      targetRevision: 0.46.0
+      helm:
+        releaseName: headlamp
+        valuesObject:
+          config:
+            # No Headlamp login: everyone who gets past Authentik (admins only) acts as
+            # Headlamp's own service account. Safe only because Traefik checks every request
+            # with Authentik first (manifests/headlamp-ui.yaml).
+            unsafeUseServiceAccountToken: true
+          # Read-only on everything except Secrets, plus deleting pods. The extra cluster-wide
+          # reads and the pod delete are in manifests/rbac.yaml.
+          clusterRoleBinding:
+            create: true
+            clusterRoleName: view
+          podSecurityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          securityContext:
+            runAsNonRoot: true
+            privileged: false
+            runAsUser: 100
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          # The control plane has only 8 GB of memory, so keep Headlamp on the workers.
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+    - repoURL: https://github.com/daav817/home-lab-hub.git
+      targetRevision: main
+      path: platform/headlamp/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: headlamp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

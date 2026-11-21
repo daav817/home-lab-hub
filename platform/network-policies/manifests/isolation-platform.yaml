@@ -1,4 +1,4 @@
-# Network isolation (Phase 7), step 2: cameras, Traefik and monitoring. Same shape and
+# Network isolation (Phase 7), step 2: cameras, Traefik, monitoring and Headlamp. Same shape and
 # staged-first approach as isolation-web-apps.yaml (read its header first).
 #
 # Not covered yet, on purpose: kube-system, longhorn-system, calico-system, metallb-system,
@@ -273,3 +273,47 @@ spec:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: calico-system}}
           podSelector: {matchLabels: {app.kubernetes.io/name: whisker}}
       ports: [{port: 8081, protocol: TCP}]
+---
+# ---------------------------------------------------------------- headlamp
+# Only Traefik (after the Authentik check) and the hub's status light may reach it. Its only
+# outbound call is the Kubernetes API; it needs no internet.
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: headlamp
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: headlamp
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: projectcalico.org/v3
+kind: StagedKubernetesNetworkPolicy
+metadata:
+  name: allow-headlamp
+  namespace: headlamp
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: headlamp}}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hub}}
+      ports: [{port: 4466, protocol: TCP}]
+  egress:
+    - to:
+        - ipBlock: {cidr: 192.168.1.100/32}   # Kubernetes API
+      ports: [{port: 6443, protocol: TCP}]

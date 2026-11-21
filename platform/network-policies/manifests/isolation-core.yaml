@@ -185,7 +185,7 @@ spec:
             matchExpressions:
               - key: kubernetes.io/metadata.name
                 operator: In
-                values: [argocd, authentik, cameras, default, energia-web, godseye, hub, investco,
+                values: [argocd, authentik, cameras, default, energia-web, godseye, headlamp, hub, investco,
                          longhorn-system, monitoring, pdf-edit, remote-access]
     - to:
         - ipBlock: {cidr: 192.168.1.1/32}     # router files (SMB)

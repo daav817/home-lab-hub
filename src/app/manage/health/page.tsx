@@ -8,6 +8,7 @@ import { RefreshButton } from "./refresh-button";
 
 const grafanaUrl = "https://grafana.energiapower.llc";
 const longhornUrl = "https://longhorn.energiapower.llc";
+const headlampUrl = "https://headlamp.energiapower.llc";
 
 function percent(value: number | null) {
   return value === null ? "No data" : `${Math.round(value * 100)}%`;
@@ -165,6 +166,9 @@ async function Health() {
       </p>
       <section className="panel flex flex-wrap items-center gap-4 p-5">
         <span className="text-muted">Dig deeper:</span>
+        <a href={headlampUrl} className="underline">
+          Headlamp (pods, logs, events)
+        </a>
         <a href={grafanaUrl} className="underline">
           Grafana
         </a>

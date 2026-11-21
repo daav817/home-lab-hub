@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 const LEVELS = {
   // Pass restricted today.
   argocd: ["restricted", "restricted"],
+  headlamp: ["restricted", "restricted"],
   hub: ["restricted", "restricted"],
   traefik: ["restricted", "restricted"],
   // Pass baseline; restricted would need their images or manifests changed.

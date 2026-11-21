@@ -1,0 +1,54 @@
+# What Headlamp may do, on top of the built-in "view" role the chart binds (read nearly
+# everything in every namespace, pod logs included, but never Secrets).
+#
+# "view" leaves out cluster-wide objects, so this adds read access to those, and lets Headlamp
+# delete pods, which is how you restart one (its Deployment makes a new one). It still can't
+# edit, scale or create anything, read Secrets, or open a shell in a pod.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: headlamp-extras
+rules:
+  - apiGroups: [""]
+    resources: [nodes, namespaces, persistentvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses, csidrivers, csinodes, volumeattachments]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingressclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings, roles, rolebindings]
+    verbs: [get, list, watch]
+  - apiGroups: [scheduling.k8s.io]
+    resources: [priorityclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [mutatingwebhookconfigurations, validatingwebhookconfigurations]
+    verbs: [get, list, watch]
+  - apiGroups: [apiregistration.k8s.io]
+    resources: [apiservices]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-extras
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: headlamp-extras
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: headlamp

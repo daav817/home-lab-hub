@@ -1,0 +1,9 @@
+# Pod Security: Headlamp passes restricted (see scripts/apply-pod-security.mjs).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: headlamp
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
