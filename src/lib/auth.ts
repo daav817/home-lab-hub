@@ -14,10 +14,11 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: "/sign-in" },
   session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
   callbacks: {
-    jwt({ token, profile }) {
+    jwt({ token, profile, account }) {
       if (profile) {
         token.groups = (profile as { groups?: string[] }).groups ?? [];
       }
+      if (account?.id_token) token.idToken = account.id_token;
       return token;
     },
     session({ session, token }) {

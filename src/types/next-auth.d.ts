@@ -10,5 +10,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     groups?: string[];
+    // Sent back to Authentik at sign-out so it can end its own session too.
+    idToken?: string;
   }
 }
