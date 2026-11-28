@@ -191,9 +191,9 @@ blinkpy==0.25.9 \
     --hash=sha256:4c135a77823e8dcfe72be601c0462326cf1c1725a193506ca638e09bbf4cf1bb \
     --hash=sha256:ef2d987f291d1f892f8a998686088a1a722c63a147b6c4588b41a639977a34c8
     # via -r requirements.in
-certifi==2026.10.23 \
-    --hash=sha256:a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd \
-    --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+certifi==2026.11.20 \
+    --hash=sha256:7422df25243767b9877031a2248cb14d09ddac9beee846f4cef3d5c9191d488f \
+    --hash=sha256:af1cb240a8133f105aa52684a3a3258339d7f2fd0bd4e2812698ff5cf5588c4e
     # via requests
 charset-normalizer==3.5.2 \
     --hash=sha256:01077390b03f7988f11d700a2194e69b119741a86b1a638b1db88891e3eced8e \
